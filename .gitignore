@@ -1,7 +1,58 @@
-.DS_Store
+# Python
 *.pyc
-*.egg-info
+*.pyo
+*.pyd
+__pycache__/
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.so
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+web/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+web/dist/
+surge/public/dist/
+
+# Editor
+.DS_Store
 *.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Env / secrets
+.env
+.env.local
+.env.*.local
+
+# Frappe
 tags
-node_modules
-__pycache__
+*.pyc
+sites/
+logs/
+
+# Coverage
+coverage/
+.nyc_output/
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Misc
+*.log
+*.tmp

@@ -1,0 +1,13 @@
+{
+  "name": "surge-pos",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "cd web && yarn install --frozen-lockfile && yarn build:no-bench",
+    "dev": "cd web && yarn dev"
+  },
+  "engines": {
+    "node": ">=18",
+    "yarn": ">=1.22"
+  }
+}

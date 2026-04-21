@@ -1,0 +1,49 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,300;6..12,400;6..12,500;6..12,600;6..12,700;6..12,800&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-primary: oklch(55% 0.22 250);
+  --color-primary-foreground: oklch(98% 0 0);
+  --color-secondary: oklch(93% 0.02 250);
+  --color-secondary-foreground: oklch(20% 0.02 250);
+  --color-muted: oklch(95% 0.01 250);
+  --color-muted-foreground: oklch(55% 0.02 250);
+  --color-accent: oklch(93% 0.03 250);
+  --color-accent-foreground: oklch(20% 0.02 250);
+  --color-destructive: oklch(55% 0.22 25);
+  --color-destructive-foreground: oklch(98% 0 0);
+  --color-card: oklch(100% 0 0);
+  --color-card-foreground: oklch(10% 0.02 250);
+  --color-background: oklch(100% 0 0);
+  --color-foreground: oklch(10% 0.02 250);
+  --color-border: oklch(88% 0.01 250);
+  --color-input: oklch(88% 0.01 250);
+  --color-ring: oklch(55% 0.22 250);
+
+  --radius: 0.5rem;
+  --font-sans: "Nunito Sans", "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+    box-sizing: border-box;
+  }
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/* stylelint-disable-next-line keyframe-block-no-duplicate-selectors */
+@keyframes shake {
+  0%, 100% { transform: translateX(0);    }
+  15%       { transform: translateX(-8px); }
+  30%       { transform: translateX(8px);  }
+  45%       { transform: translateX(-6px); }
+  60%       { transform: translateX(6px);  }
+  75%       { transform: translateX(-3px); }
+  90%       { transform: translateX(3px);  }
+}

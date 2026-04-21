@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Surge POS</title>
+  <link rel="manifest" href="/assets/surge/manifest.json" />
+  <link rel="icon" type="image/png" href="/assets/surge/images/SurgeLogo.png" />
+  <script>
+    window.SURGE_CONFIG = {
+      csrf_token: "{{ csrf_token }}",
+      user: "{{ user }}",
+      user_fullname: "{{ user_fullname }}",
+      site_name: "{{ site_name }}",
+      has_desk_access: {{ has_desk_access }},
+    };
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  {%- if dev_server -%}
+  <script type="module" src="http://localhost:5173/@vite/client"></script>
+  <script type="module" src="http://localhost:5173/src/main.tsx"></script>
+  {%- else -%}
+  <link rel="stylesheet" crossorigin href="/assets/surge/dist/surge.css">
+  <link rel="modulepreload" crossorigin href="/assets/surge/dist/surge-R7L8zphM.js">
+  <link rel="modulepreload" crossorigin href="/assets/surge/dist/surge-CxcIxU-E.js">
+  <link rel="modulepreload" crossorigin href="/assets/surge/dist/surge-NnrrSBxP.js">
+  <link rel="modulepreload" crossorigin href="/assets/surge/dist/surge-XocotSym.js">
+  <script type="module" crossorigin src="/assets/surge/dist/surge.js"></script>
+  {%- endif -%}
+</body>
+</html>
