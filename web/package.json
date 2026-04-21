@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build && node scripts/post-build.mjs",
     "build:no-bench": "tsc && vite build && node scripts/post-build.mjs --skip-bench",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",

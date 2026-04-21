@@ -1,17 +1,18 @@
 import frappe
-from surge.utils.cache import get_or_compute, cache_key, ITEM_CACHE_TTL
-from surge.utils.json import surge_response
+
+from surge.utils.cache import ITEM_CACHE_TTL, cache_key, get_or_compute
 from surge.utils.db import items_query
+from surge.utils.json import surge_response
 from surge.utils.permissions import require_pos_profile_access, require_pos_role
 
 
 @frappe.whitelist(allow_guest=False)
 def get_pos_profiles():
-    require_pos_role()
-    user = frappe.session.user
+	require_pos_role()
+	user = frappe.session.user
 
-    rows = frappe.db.sql(
-        """
+	rows = frappe.db.sql(
+		"""
         SELECT p.name, p.warehouse, p.currency, p.selling_price_list,
                p.company
         FROM `tabPOS Profile` p
@@ -28,76 +29,80 @@ def get_pos_profiles():
           )
         ORDER BY p.name ASC
         """,
-        {"user": user},
-        as_dict=True,
-    )
-    return surge_response({"profiles": rows})
+		{"user": user},
+		as_dict=True,
+	)
+	return surge_response({"profiles": rows})
 
 
 @frappe.whitelist(allow_guest=False)
 def get_items(profile: str, since: str = "", limit: int = 500):
-    require_pos_profile_access(profile)
-    limit = min(int(limit), 2000)
+	require_pos_profile_access(profile)
+	limit = min(int(limit), 2000)
 
-    if since:
-        items = _fetch_and_annotate(since=since, limit=limit)
-        watermark = str(max(i["modified"] for i in items)) if items else None
-        return surge_response({"items": items, "watermark": watermark, "count": len(items)})
+	if since:
+		items = _fetch_and_annotate(since=since, limit=limit)
+		watermark = str(max(i["modified"] for i in items)) if items else None
+		return surge_response({"items": items, "watermark": watermark, "count": len(items)})
 
-    key = cache_key("items", profile)
+	key = cache_key("items", profile)
 
-    def _compute():
-        rows = _fetch_and_annotate(since="", limit=limit)
-        wm = str(max(r["modified"] for r in rows)) if rows else None
-        return {"items": rows, "watermark": wm, "count": len(rows)}
+	def _compute():
+		rows = _fetch_and_annotate(since="", limit=limit)
+		wm = str(max(r["modified"] for r in rows)) if rows else None
+		return {"items": rows, "watermark": wm, "count": len(rows)}
 
-    result = get_or_compute(key, _compute, ITEM_CACHE_TTL)
-    return surge_response(result)
+	result = get_or_compute(key, _compute, ITEM_CACHE_TTL)
+	return surge_response(result)
 
 
 @frappe.whitelist(allow_guest=False)
 def get_item_prices(profile: str, since: str = "", limit: int = 2000):
-    require_pos_profile_access(profile)
+	require_pos_profile_access(profile)
 
-    pos_profile = frappe.get_cached_doc("POS Profile", profile)
-    price_list = pos_profile.selling_price_list or "Standard Selling"
-    limit = min(int(limit), 5000)
+	pos_profile = frappe.get_cached_doc("POS Profile", profile)
+	price_list = pos_profile.selling_price_list or "Standard Selling"
+	limit = min(int(limit), 5000)
 
-    if since:
-        prices = _fetch_prices(price_list=price_list, since=since, limit=limit)
-        watermark = str(max(p["modified"] for p in prices)) if prices else None
-        return surge_response({
-            "prices": prices, "price_list": price_list,
-            "watermark": watermark, "count": len(prices),
-        })
+	if since:
+		prices = _fetch_prices(price_list=price_list, since=since, limit=limit)
+		watermark = str(max(p["modified"] for p in prices)) if prices else None
+		return surge_response(
+			{
+				"prices": prices,
+				"price_list": price_list,
+				"watermark": watermark,
+				"count": len(prices),
+			}
+		)
 
-    key = cache_key("prices", profile)
+	key = cache_key("prices", profile)
 
-    def _compute():
-        rows = _fetch_prices(price_list=price_list, since="", limit=limit)
-        wm = str(max(r["modified"] for r in rows)) if rows else None
-        return {"prices": rows, "price_list": price_list, "watermark": wm, "count": len(rows)}
+	def _compute():
+		rows = _fetch_prices(price_list=price_list, since="", limit=limit)
+		wm = str(max(r["modified"] for r in rows)) if rows else None
+		return {"prices": rows, "price_list": price_list, "watermark": wm, "count": len(rows)}
 
-    result = get_or_compute(key, _compute, ITEM_CACHE_TTL)
-    return surge_response(result)
+	result = get_or_compute(key, _compute, ITEM_CACHE_TTL)
+	return surge_response(result)
 
 
 def _fetch_and_annotate(since: str, limit: int) -> list[dict]:
-    items = items_query(since=since, limit=limit)
-    for item in items:
-        raw = item.get("barcodes") or ""
-        item["barcodes"] = [b for b in raw.split(",") if b]
-    return items
+	items = items_query(since=since, limit=limit)
+	for item in items:
+		raw = item.get("barcodes") or ""
+		item["barcodes"] = [b for b in raw.split(",") if b]
+	return items
 
 
 def _fetch_prices(price_list: str, since: str, limit: int) -> list[dict]:
-    params: dict = {"price_list": price_list, "limit": limit}
-    since_clause = ""
-    if since:
-        since_clause = "AND modified > %(since)s"
-        params["since"] = since
+	params: dict = {"price_list": price_list, "limit": limit}
+	since_clause = ""
+	if since:
+		since_clause = "AND modified > %(since)s"
+		params["since"] = since
 
-    sql = """
+	sql = f"""
         SELECT item_code, price_list_rate, currency, price_list, modified
         FROM `tabItem Price`
         WHERE price_list = %(price_list)s
@@ -105,6 +110,6 @@ def _fetch_prices(price_list: str, since: str, limit: int) -> list[dict]:
           {since_clause}
         ORDER BY modified ASC
         LIMIT %(limit)s
-    """.format(since_clause=since_clause)
+    """
 
-    return frappe.db.sql(sql, params, as_dict=True)
+	return frappe.db.sql(sql, params, as_dict=True)

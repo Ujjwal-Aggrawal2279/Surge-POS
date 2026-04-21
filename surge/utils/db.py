@@ -1,23 +1,24 @@
-import frappe
 from typing import Any
+
+import frappe
 
 
 def raw_query(sql: str, values: tuple = ()) -> list[tuple]:
-    return frappe.db.sql(sql, values)
+	return frappe.db.sql(sql, values)
 
 
 def raw_query_dict(sql: str, values: tuple = ()) -> list[dict]:
-    return frappe.db.sql(sql, values, as_dict=True)
+	return frappe.db.sql(sql, values, as_dict=True)
 
 
 def items_query(since: str = "", limit: int = 500) -> list[dict]:
-    params: dict[str, Any] = {"limit": limit}
-    since_clause = ""
-    if since:
-        since_clause = "AND i.modified > %(since)s"
-        params["since"] = since
+	params: dict[str, Any] = {"limit": limit}
+	since_clause = ""
+	if since:
+		since_clause = "AND i.modified > %(since)s"
+		params["since"] = since
 
-    sql = """
+	sql = f"""
         SELECT
             i.name          AS item_code,
             i.item_name,
@@ -35,15 +36,15 @@ def items_query(since: str = "", limit: int = 500) -> list[dict]:
         GROUP BY i.name
         ORDER BY i.modified ASC
         LIMIT %(limit)s
-    """.format(since_clause=since_clause)
+    """
 
-    return frappe.db.sql(sql, params, as_dict=True)
+	return frappe.db.sql(sql, params, as_dict=True)
 
 
 def stock_query(warehouse: str, since: str = "") -> list[dict]:
-    if since:
-        return frappe.db.sql(
-            """
+	if since:
+		return frappe.db.sql(
+			"""
             SELECT item_code, warehouse, actual_qty, reserved_qty, modified
             FROM `tabBin`
             WHERE warehouse = %(warehouse)s
@@ -51,11 +52,11 @@ def stock_query(warehouse: str, since: str = "") -> list[dict]:
             ORDER BY modified ASC
             LIMIT 10000
             """,
-            {"warehouse": warehouse, "since": since},
-            as_dict=True,
-        )
-    return frappe.db.sql(
-        """
+			{"warehouse": warehouse, "since": since},
+			as_dict=True,
+		)
+	return frappe.db.sql(
+		"""
         SELECT item_code, warehouse, actual_qty, reserved_qty, modified
         FROM `tabBin`
         WHERE warehouse = %(warehouse)s
@@ -63,19 +64,19 @@ def stock_query(warehouse: str, since: str = "") -> list[dict]:
         ORDER BY modified ASC
         LIMIT 10000
         """,
-        {"warehouse": warehouse},
-        as_dict=True,
-    )
+		{"warehouse": warehouse},
+		as_dict=True,
+	)
 
 
 def customers_query(since: str = "", limit: int = 1000) -> list[dict]:
-    params: dict[str, Any] = {"limit": limit}
-    since_clause = ""
-    if since:
-        since_clause = "AND modified > %(since)s"
-        params["since"] = since
+	params: dict[str, Any] = {"limit": limit}
+	since_clause = ""
+	if since:
+		since_clause = "AND modified > %(since)s"
+		params["since"] = since
 
-    sql = """
+	sql = f"""
         SELECT
             name        AS customer_id,
             customer_name,
@@ -89,6 +90,6 @@ def customers_query(since: str = "", limit: int = 1000) -> list[dict]:
           {since_clause}
         ORDER BY modified ASC
         LIMIT %(limit)s
-    """.format(since_clause=since_clause)
+    """
 
-    return frappe.db.sql(sql, params, as_dict=True)
+	return frappe.db.sql(sql, params, as_dict=True)
