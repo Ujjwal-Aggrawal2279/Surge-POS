@@ -13,6 +13,7 @@ required_apps = ["frappe", "erpnext"]
 # ---------------------------------------------------------------------------
 
 after_install = "surge.setup.install.after_install"
+after_migrate = "surge.setup.install.after_install"
 before_uninstall = "surge.setup.uninstall.before_uninstall"
 
 # ---------------------------------------------------------------------------
