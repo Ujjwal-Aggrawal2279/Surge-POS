@@ -2,11 +2,11 @@ import time
 
 import frappe
 
+from surge.utils import tombstone as tb
 from surge.utils.cache import ITEM_CACHE_TTL, cache_key, get_or_compute
 from surge.utils.db import items_query
 from surge.utils.json import surge_response
 from surge.utils.permissions import require_pos_profile_access, require_pos_role
-from surge.utils import tombstone as tb
 
 
 @frappe.whitelist(allow_guest=False)
@@ -68,7 +68,9 @@ def get_items(profile: str, since: str = "", limit: int = 500):
 		except Exception:
 			since_ts = time.time() - 86_400
 		dead = tb.since(since_ts)
-		return surge_response({"items": items, "watermark": watermark, "count": len(items), "tombstones": dead})
+		return surge_response(
+			{"items": items, "watermark": watermark, "count": len(items), "tombstones": dead}
+		)
 
 	key = cache_key("items", profile)
 

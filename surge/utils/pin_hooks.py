@@ -15,11 +15,7 @@ def auto_generate_pins_for_profile(doc, method=None):
 	hooks are called before Frappe serialises the row, so assignments made
 	there are silently discarded.
 	"""
-	assigned: set[str] = {
-		row.surge_pos_pin
-		for row in doc.applicable_for_users
-		if row.surge_pos_pin
-	}
+	assigned: set[str] = {row.surge_pos_pin for row in doc.applicable_for_users if row.surge_pos_pin}
 	for row in doc.applicable_for_users:
 		if row.status == "Active" and not row.surge_pos_pin:
 			row.surge_pos_pin = _unique_pin(assigned)

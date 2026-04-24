@@ -56,3 +56,5 @@ htmlcov/
 # Misc
 *.log
 *.tmp
+surge/public/node_modules
+surge/public/node_modules

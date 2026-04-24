@@ -270,7 +270,9 @@ def request_approval(pos_profile: str, approver: str, pin: str, action: str, met
 		return surge_response({"status": "invalid", "message": "Approver not active on this profile."})
 
 	if row.access_level not in ("Supervisor", "Manager"):
-		return surge_response({"status": "forbidden", "message": "Only Supervisors and Managers can approve."})
+		return surge_response(
+			{"status": "forbidden", "message": "Only Supervisors and Managers can approve."}
+		)
 
 	if not row.surge_pos_pin or pin != _hash_pin(row.surge_pos_pin):
 		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
@@ -295,8 +297,9 @@ def request_approval(pos_profile: str, approver: str, pin: str, action: str, met
 	except Exception:
 		frappe.logger().warning("Surge: Redis unavailable — approval token not stored in cache")
 
-	_log_action("approval_granted", user=approver, profile=pos_profile,
-	            by=frappe.session.user, new_value=action)
+	_log_action(
+		"approval_granted", user=approver, profile=pos_profile, by=frappe.session.user, new_value=action
+	)
 	return surge_response({"status": "ok", "token": token})
 
 
@@ -337,10 +340,12 @@ def request_approval_remote(pos_profile: str, approver: str, action: str, meta: 
 		cache.execute_command("EXPIRE", pending_key, APPROVAL_TOKEN_TTL)
 	except Exception:
 		# Redis unavailable — remote flow cannot work; tell cashier to use same-screen PIN
-		return surge_response({
-			"status": "redis_unavailable",
-			"message": "Remote approval is temporarily unavailable. Ask the manager to enter their PIN on this screen.",
-		})
+		return surge_response(
+			{
+				"status": "redis_unavailable",
+				"message": "Remote approval is temporarily unavailable. Ask the manager to enter their PIN on this screen.",
+			}
+		)
 
 	frappe.publish_realtime(
 		"surge:approval_request",
@@ -351,20 +356,22 @@ def request_approval_remote(pos_profile: str, approver: str, action: str, meta: 
 
 	# Persistent notification so manager sees it on login even if they missed the realtime event
 	try:
-		frappe.get_doc({
-			"doctype": "Notification Log",
-			"subject": f"Approval request from {cashier_name}",
-			"email_content": (
-				f"<b>{cashier_name}</b> is requesting approval for "
-				f"<b>{action.replace('_', ' ')}</b> on POS Profile <b>{pos_profile}</b>. "
-				f"Open Surge POS to approve or deny."
-			),
-			"for_user": approver,
-			"type": "Alert",
-			"from_user": cashier,
-			"document_type": "POS Profile",
-			"document_name": pos_profile,
-		}).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Notification Log",
+				"subject": f"Approval request from {cashier_name}",
+				"email_content": (
+					f"<b>{cashier_name}</b> is requesting approval for "
+					f"<b>{action.replace('_', ' ')}</b> on POS Profile <b>{pos_profile}</b>. "
+					f"Open Surge POS to approve or deny."
+				),
+				"for_user": approver,
+				"type": "Alert",
+				"from_user": cashier,
+				"document_type": "POS Profile",
+				"document_name": pos_profile,
+			}
+		).insert(ignore_permissions=True)
 		frappe.db.commit()
 	except Exception:
 		pass
@@ -470,8 +477,12 @@ def respond_to_approval(req_id: str, pin: str, decision: str) -> object:
 	if decision == "deny":
 		res = {"status": "denied", "message": "Your discount request was denied."}
 		cache.set_value(_APPROVAL_RES_KEY.format(req_id=req_id), res, expires_in_sec=120)
-		frappe.publish_realtime("surge:approval_response", {**res, "req_id": req_id}, user=cashier_user, after_commit=False)
-		_log_action("approval_denied", user=cashier_user, profile=pos_profile, by=approver, new_value=req["action"])
+		frappe.publish_realtime(
+			"surge:approval_response", {**res, "req_id": req_id}, user=cashier_user, after_commit=False
+		)
+		_log_action(
+			"approval_denied", user=cashier_user, profile=pos_profile, by=approver, new_value=req["action"]
+		)
 		return surge_response({"status": "ok"})
 
 	# Approve — issue HMAC token
@@ -490,9 +501,13 @@ def respond_to_approval(req_id: str, pin: str, decision: str) -> object:
 	approver_name = frappe.db.get_value("User", approver, "full_name") or approver
 	res = {"status": "approved", "token": token, "approver_name": approver_name}
 	cache.set_value(_APPROVAL_RES_KEY.format(req_id=req_id), res, expires_in_sec=120)
-	frappe.publish_realtime("surge:approval_response", {**res, "req_id": req_id}, user=cashier_user, after_commit=False)
+	frappe.publish_realtime(
+		"surge:approval_response", {**res, "req_id": req_id}, user=cashier_user, after_commit=False
+	)
 
-	_log_action("approval_granted", user=cashier_user, profile=pos_profile, by=approver, new_value=req["action"])
+	_log_action(
+		"approval_granted", user=cashier_user, profile=pos_profile, by=approver, new_value=req["action"]
+	)
 	return surge_response({"status": "ok"})
 
 
@@ -648,6 +663,7 @@ def verify_approval_token(token: str) -> dict | None:
 
 		# Enforce TTL
 		from datetime import datetime
+
 		ts = datetime.fromisoformat(payload["ts"])
 		if (now_datetime() - ts).total_seconds() > APPROVAL_TOKEN_TTL:
 			return None
@@ -671,6 +687,7 @@ def verify_approval_token(token: str) -> dict | None:
 def _get_hmac_secret() -> bytes:
 	try:
 		from frappe.utils.password import get_encryption_key
+
 		key = get_encryption_key()
 		return key.encode() if isinstance(key, str) else key
 	except Exception:
@@ -714,8 +731,7 @@ def _log_action(
 ) -> None:
 	try:
 		frappe.logger().info(
-			f"Surge audit | action={action} user={user} profile={profile} "
-			f"by={by or user} invoice={invoice}"
+			f"Surge audit | action={action} user={user} profile={profile} by={by or user} invoice={invoice}"
 		)
 	except Exception:
 		pass
