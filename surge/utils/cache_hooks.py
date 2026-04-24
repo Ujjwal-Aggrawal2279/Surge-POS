@@ -5,8 +5,8 @@ Called by Frappe after insert/update/trash on watched DocTypes.
 
 import frappe
 
-from surge.utils.cache import cache_key, invalidate
 from surge.utils import tombstone as tb
+from surge.utils.cache import cache_key, invalidate
 
 
 def _coalesced_publish(event: str, message: dict, gate_key: str, window_sec: int = 1) -> None:

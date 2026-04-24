@@ -28,8 +28,9 @@ def before_cancel(doc, method=None):
 	)
 
 
-def _write_audit(action_type: str, user: str, pos_profile: str, invoice: str,
-                 old_value: str = "", new_value: str = "") -> None:
+def _write_audit(
+	action_type: str, user: str, pos_profile: str, invoice: str, old_value: str = "", new_value: str = ""
+) -> None:
 	try:
 		if not frappe.db.table_exists("POS Security Audit Log"):
 			return

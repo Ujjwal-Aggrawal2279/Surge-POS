@@ -3,7 +3,9 @@ Supplier Master Import — 3 Suppliers
 
 Run:
   bench --site <site> console
-  >>> from surge.data_migration.import_suppliers import run; run()
+  >>> from surge.data_migration.import_suppliers import run
+  ...
+  ... run()
 
 Creates per supplier:
   - Supplier (with GSTIN, PAN, group)
@@ -21,6 +23,7 @@ COUNTRY = "India"
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def run():
 	_log("Starting supplier master import")
@@ -43,7 +46,7 @@ def run():
 
 	frappe.db.commit()
 
-	_log(f"\n{'='*50}")
+	_log(f"\n{'=' * 50}")
 	_log(f"Suppliers imported : {imported}")
 	if errors:
 		_log(f"Errors ({len(errors)}):")
@@ -56,6 +59,7 @@ def run():
 # ---------------------------------------------------------------------------
 # Prerequisites
 # ---------------------------------------------------------------------------
+
 
 def _setup_prerequisites():
 	_log("\n--- Setting up prerequisites ---")
@@ -78,8 +82,10 @@ def _ensure_supplier_group(name, parent):
 # XLSX parsing
 # ---------------------------------------------------------------------------
 
+
 def _parse_xlsx():
 	import openpyxl
+
 	wb = openpyxl.load_workbook(XLSX_PATH, read_only=True, data_only=True)
 	ws = wb.active
 	headers = None
@@ -91,7 +97,7 @@ def _parse_xlsx():
 		values = [c for c in row if c is not None]
 		if not values:
 			continue
-		record = dict(zip(headers, row))
+		record = dict(zip(headers, row, strict=False))
 		if record.get("Vendor Name"):
 			rows.append(record)
 	return rows
@@ -101,19 +107,20 @@ def _parse_xlsx():
 # Import
 # ---------------------------------------------------------------------------
 
+
 def _import_supplier(row):
-	name      = str(row.get("Vendor Name", "")).strip()
-	industry  = str(row.get("Industry Type", "") or "").strip()
-	contact   = str(row.get("Contact Name", "") or "").strip()
-	address   = " ".join(str(row.get("Address", "") or "").split())  # collapse newlines/extra spaces
-	pincode   = str(row.get("Pin Code", "") or "").strip()
-	city      = str(row.get("City", "") or "").strip()
-	state     = _normalise_state(str(row.get("State", "") or "").strip())
-	phone     = _clean_phone(row.get("Phone"))
-	pan       = _clean_pan(row.get("PAN"))
-	gstin     = str(row.get("GST", "") or "").strip()
-	email     = str(row.get("E-mail", "") or "").strip()
-	comments  = str(row.get("Comments", "") or "").strip()
+	name = str(row.get("Vendor Name", "")).strip()
+	industry = str(row.get("Industry Type", "") or "").strip()
+	contact = str(row.get("Contact Name", "") or "").strip()
+	address = " ".join(str(row.get("Address", "") or "").split())  # collapse newlines/extra spaces
+	pincode = str(row.get("Pin Code", "") or "").strip()
+	city = str(row.get("City", "") or "").strip()
+	state = _normalise_state(str(row.get("State", "") or "").strip())
+	phone = _clean_phone(row.get("Phone"))
+	pan = _clean_pan(row.get("PAN"))
+	gstin = str(row.get("GST", "") or "").strip()
+	email = str(row.get("E-mail", "") or "").strip()
+	comments = str(row.get("Comments", "") or "").strip()
 
 	supplier_name = _import_supplier_doc(name, industry, pan, gstin, comments)
 	_import_address(supplier_name, name, address, city, state, pincode, email, phone)
@@ -128,10 +135,10 @@ def _import_supplier_doc(name, industry, pan, gstin, comments):
 		return name
 
 	doc = frappe.new_doc("Supplier")
-	doc.supplier_name    = name
-	doc.supplier_group   = SUPPLIER_GROUP
-	doc.supplier_type    = "Company"
-	doc.country          = COUNTRY
+	doc.supplier_name = name
+	doc.supplier_group = SUPPLIER_GROUP
+	doc.supplier_type = "Company"
+	doc.country = COUNTRY
 	doc.supplier_details = "\n".join(filter(None, [industry, comments]))
 
 	if pan:
@@ -152,13 +159,13 @@ def _import_address(supplier_name, title, address_line1, city, state, pincode, e
 		return
 
 	doc = frappe.new_doc("Address")
-	doc.address_title      = title  # ERPNext appends "-{type}" automatically
-	doc.address_type       = "Billing"
-	doc.address_line1      = address_line1
-	doc.city               = city
-	doc.state              = state
-	doc.pincode            = pincode
-	doc.country            = COUNTRY
+	doc.address_title = title  # ERPNext appends "-{type}" automatically
+	doc.address_type = "Billing"
+	doc.address_line1 = address_line1
+	doc.city = city
+	doc.state = state
+	doc.pincode = pincode
+	doc.country = COUNTRY
 	doc.is_primary_address = 1
 
 	if email:
@@ -166,10 +173,13 @@ def _import_address(supplier_name, title, address_line1, city, state, pincode, e
 	if phone:
 		doc.phone = phone
 
-	doc.append("links", {
-		"link_doctype": "Supplier",
-		"link_name":    supplier_name,
-	})
+	doc.append(
+		"links",
+		{
+			"link_doctype": "Supplier",
+			"link_name": supplier_name,
+		},
+	)
 
 	doc.insert(ignore_permissions=True)
 
@@ -183,11 +193,11 @@ def _import_contact(supplier_name, contact_name, phone, email):
 
 	parts = contact_name.split(None, 1)
 	first = parts[0] if parts else contact_name
-	last  = parts[1] if len(parts) > 1 else ""
+	last = parts[1] if len(parts) > 1 else ""
 
 	doc = frappe.new_doc("Contact")
 	doc.first_name = first
-	doc.last_name  = last
+	doc.last_name = last
 
 	if email:
 		doc.append("email_ids", {"email_id": email, "is_primary": 1})
@@ -195,10 +205,13 @@ def _import_contact(supplier_name, contact_name, phone, email):
 	if phone:
 		doc.append("phone_nos", {"phone": phone, "is_primary_mobile_no": 1})
 
-	doc.append("links", {
-		"link_doctype": "Supplier",
-		"link_name":    supplier_name,
-	})
+	doc.append(
+		"links",
+		{
+			"link_doctype": "Supplier",
+			"link_name": supplier_name,
+		},
+	)
 
 	doc.insert(ignore_permissions=True)
 
@@ -207,15 +220,47 @@ def _import_contact(supplier_name, contact_name, phone, email):
 # Helpers
 # ---------------------------------------------------------------------------
 
-_STATE_MAP = {s.upper(): s for s in [
-	"Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam",
-	"Bihar", "Chandigarh", "Chhattisgarh", "Dadra and Nagar Haveli and Daman and Diu",
-	"Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir",
-	"Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh",
-	"Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha",
-	"Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana",
-	"Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-]}
+_STATE_MAP = {
+	s.upper(): s
+	for s in [
+		"Andaman and Nicobar Islands",
+		"Andhra Pradesh",
+		"Arunachal Pradesh",
+		"Assam",
+		"Bihar",
+		"Chandigarh",
+		"Chhattisgarh",
+		"Dadra and Nagar Haveli and Daman and Diu",
+		"Delhi",
+		"Goa",
+		"Gujarat",
+		"Haryana",
+		"Himachal Pradesh",
+		"Jammu and Kashmir",
+		"Jharkhand",
+		"Karnataka",
+		"Kerala",
+		"Ladakh",
+		"Lakshadweep",
+		"Madhya Pradesh",
+		"Maharashtra",
+		"Manipur",
+		"Meghalaya",
+		"Mizoram",
+		"Nagaland",
+		"Odisha",
+		"Puducherry",
+		"Punjab",
+		"Rajasthan",
+		"Sikkim",
+		"Tamil Nadu",
+		"Telangana",
+		"Tripura",
+		"Uttar Pradesh",
+		"Uttarakhand",
+		"West Bengal",
+	]
+}
 
 
 def _normalise_state(val: str) -> str:

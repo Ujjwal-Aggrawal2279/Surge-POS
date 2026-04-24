@@ -12,6 +12,7 @@ India Compliance note:
 """
 
 import re
+
 import frappe
 from frappe.utils import nowdate
 
@@ -36,6 +37,7 @@ VAT_RATE = 22.0
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def run():
 	_log("Starting item master import")
@@ -63,7 +65,7 @@ def run():
 
 	frappe.db.commit()
 
-	_log(f"\n{'='*50}")
+	_log(f"\n{'=' * 50}")
 	_log(f"Templates imported : {imported_templates}")
 	_log(f"Variants imported  : {imported_variants}")
 	if errors:
@@ -77,6 +79,7 @@ def run():
 # ---------------------------------------------------------------------------
 # Prerequisites
 # ---------------------------------------------------------------------------
+
 
 def _setup_prerequisites():
 	_log("\n--- Setting up prerequisites ---")
@@ -151,17 +154,24 @@ def _ensure_item_tax_template():
 	doc.title = TAX_TEMPLATE_TITLE
 	doc.company = COMPANY
 	doc.gst_treatment = "Non-GST"
-	doc.append("taxes", {
-		"tax_type": VAT_ACCOUNT,
-		"tax_rate": VAT_RATE,
-	})
+	doc.append(
+		"taxes",
+		{
+			"tax_type": VAT_ACCOUNT,
+			"tax_rate": VAT_RATE,
+		},
+	)
 	doc.insert(ignore_permissions=True)
 	_log(f"  Created Item Tax Template: {template_name}")
 
 
 def _ensure_volume_attribute():
 	all_volumes = {
-		"330 ML", "500 ML", "650 ML", "330 ML Can", "500 ML Can",
+		"330 ML",
+		"500 ML",
+		"650 ML",
+		"330 ML Can",
+		"500 ML Can",
 	}
 	if frappe.db.exists("Item Attribute", VOLUME_ATTRIBUTE):
 		doc = frappe.get_doc("Item Attribute", VOLUME_ATTRIBUTE)
@@ -169,10 +179,13 @@ def _ensure_volume_attribute():
 		missing = all_volumes - existing
 		if missing:
 			for val in sorted(missing):
-				doc.append("item_attribute_values", {
-					"attribute_value": val,
-					"abbr": val.replace(" ", "")[:8],
-				})
+				doc.append(
+					"item_attribute_values",
+					{
+						"attribute_value": val,
+						"abbr": val.replace(" ", "")[:8],
+					},
+				)
 			doc.save(ignore_permissions=True)
 			_log(f"  Added Volume values: {missing}")
 		return
@@ -181,10 +194,13 @@ def _ensure_volume_attribute():
 	doc.attribute_name = VOLUME_ATTRIBUTE
 	doc.numeric_values = 0
 	for val in sorted(all_volumes):
-		doc.append("item_attribute_values", {
-			"attribute_value": val,
-			"abbr": val.replace(" ", "")[:8],
-		})
+		doc.append(
+			"item_attribute_values",
+			{
+				"attribute_value": val,
+				"abbr": val.replace(" ", "")[:8],
+			},
+		)
 	doc.insert(ignore_permissions=True)
 	_log(f"  Created Item Attribute: {VOLUME_ATTRIBUTE}")
 
@@ -201,8 +217,10 @@ def _ensure_brand(brand_name):
 # XLSX parsing
 # ---------------------------------------------------------------------------
 
+
 def _parse_xlsx():
 	import openpyxl
+
 	wb = openpyxl.load_workbook(XLSX_PATH, read_only=True, data_only=True)
 	ws = wb.active
 
@@ -216,7 +234,7 @@ def _parse_xlsx():
 		values = [c for c in row if c is not None]
 		if not values:
 			continue
-		record = dict(zip(headers, row))
+		record = dict(zip(headers, row, strict=False))
 		# Only keep rows that have at least a variation name
 		if not record.get("VARIATION NAME"):
 			continue
@@ -260,9 +278,7 @@ def _extract_template_and_volume(variation_name: str, ml_gms: str):
 	name = _normalise_name(variation_name)
 
 	# Pattern A: volume then CAN at end  e.g. "CORONA BEER 500 ML CAN"
-	pat_vol_then_can = re.compile(
-		rf"\s+{ml_num}\s*(?:ML|GMS)\s+CAN\s*$", re.IGNORECASE
-	)
+	pat_vol_then_can = re.compile(rf"\s+{ml_num}\s*(?:ML|GMS)\s+CAN\s*$", re.IGNORECASE)
 	if pat_vol_then_can.search(name):
 		template = pat_vol_then_can.sub("", name).strip()
 		return template, f"{ml_num} ML Can"
@@ -291,7 +307,6 @@ def _group_into_templates(rows):
 	for row in rows:
 		brand = str(row.get("BRAND NAME", "")).strip()
 		variation = str(row.get("VARIATION NAME", "")).strip()
-		category = str(row.get("CATEGORY", "")).strip().upper()
 		sub_cat = str(row.get("SUB \nCATEGORY", "") or "").strip().upper()
 		ml_gms = str(row.get("ML/GMS", "")).strip()
 		sku = row.get("ITEM SKU")
@@ -361,6 +376,7 @@ def _classify_sku(sku):
 # Item import
 # ---------------------------------------------------------------------------
 
+
 def _import_template(tpl: dict) -> int:
 	template_name = tpl["template_name"]
 	brand = tpl["brand"]
@@ -387,13 +403,16 @@ def _import_template(tpl: dict) -> int:
 
 		template_doc.append("taxes", {"item_tax_template": tax_template})
 
-		template_doc.append("item_defaults", {
-			"company": COMPANY,
-			"default_warehouse": WAREHOUSE,
-			"income_account": INCOME_ACCOUNT,
-			"expense_account": EXPENSE_ACCOUNT,
-			"cost_center": COST_CENTER,
-		})
+		template_doc.append(
+			"item_defaults",
+			{
+				"company": COMPANY,
+				"default_warehouse": WAREHOUSE,
+				"income_account": INCOME_ACCOUNT,
+				"expense_account": EXPENSE_ACCOUNT,
+				"cost_center": COST_CENTER,
+			},
+		)
 
 		template_doc.insert(ignore_permissions=True)
 		_log(f"  ✓ Template: {template_name}")
@@ -444,10 +463,13 @@ def _import_variant(template_code: str, var: dict):
 	# Clear auto-inherited barcodes and set from xlsx
 	variant_doc.barcodes = []
 	for barcode_val, barcode_type in barcodes:
-		variant_doc.append("barcodes", {
-			"barcode": barcode_val,
-			"barcode_type": barcode_type,
-		})
+		variant_doc.append(
+			"barcodes",
+			{
+				"barcode": barcode_val,
+				"barcode_type": barcode_type,
+			},
+		)
 
 	variant_doc.insert(ignore_permissions=True)
 
@@ -458,11 +480,14 @@ def _import_variant(template_code: str, var: dict):
 
 
 def _create_item_price(item_code: str, rate: float):
-	if frappe.db.exists("Item Price", {
-		"item_code": item_code,
-		"price_list": PRICE_LIST,
-		"selling": 1,
-	}):
+	if frappe.db.exists(
+		"Item Price",
+		{
+			"item_code": item_code,
+			"price_list": PRICE_LIST,
+			"selling": 1,
+		},
+	):
 		return
 
 	doc = frappe.new_doc("Item Price")
@@ -478,6 +503,7 @@ def _create_item_price(item_code: str, rate: float):
 # ---------------------------------------------------------------------------
 # Patch: add Code128 barcodes to existing items that had alphanumeric SKUs
 # ---------------------------------------------------------------------------
+
 
 def patch_code128_barcodes():
 	"""
@@ -530,6 +556,7 @@ def patch_code128_barcodes():
 # ---------------------------------------------------------------------------
 # Util
 # ---------------------------------------------------------------------------
+
 
 def _log(msg: str):
 	print(msg)

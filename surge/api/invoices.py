@@ -146,9 +146,9 @@ def _check_discount_limits(req: CreateInvoiceRequest) -> dict | None:
 	)
 
 	limit_map = {
-		"Cashier":    float(getattr(profile_doc, "discount_limit_cashier",    5)  or 5),
+		"Cashier": float(getattr(profile_doc, "discount_limit_cashier", 5) or 5),
 		"Supervisor": float(getattr(profile_doc, "discount_limit_supervisor", 15) or 15),
-		"Manager":    float(getattr(profile_doc, "discount_limit_manager",   100) or 100),
+		"Manager": float(getattr(profile_doc, "discount_limit_manager", 100) or 100),
 	}
 	max_pct = limit_map.get(access_level, 5)
 
