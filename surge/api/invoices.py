@@ -73,6 +73,12 @@ def create_invoice():
 
 
 def _submit_invoice(req: CreateInvoiceRequest) -> str:
+	# Idempotency guard — client may retry after a network drop that happened after
+	# the server already submitted. Return the existing invoice rather than creating a duplicate.
+	existing = frappe.db.get_value("POS Invoice", {"surge_client_req_id": req.client_request_id}, "name")
+	if existing:
+		return existing
+
 	pos_profile = frappe.get_cached_doc("POS Profile", req.pos_profile)
 
 	invoice = frappe.new_doc("POS Invoice")

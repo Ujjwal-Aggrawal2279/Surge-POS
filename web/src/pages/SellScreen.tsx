@@ -5,11 +5,14 @@ import { Cart } from "@/components/pos/Cart";
 import { PaymentDialog } from "@/components/pos/PaymentDialog";
 import { useCartStore } from "@/stores/cart";
 import { useIdleLock } from "@/hooks/useIdleLock";
+import { useSyncQueue } from "@/hooks/useSyncQueue";
 import { config, post } from "@/lib/api";
 import { clearSession } from "@/lib/session";
-import { formatCurrency, cn } from "@/lib/utils";
-import { Loader2, Lock, Monitor, ShoppingCart, LogOut, Clock } from "lucide-react";
+import { formatCurrency } from "@/lib/utils";
+import { Loader2, Lock, Monitor, ShoppingCart, LogOut, Clock, WifiOff } from "lucide-react";
 import { ApprovalQueue } from "@/components/pos/ApprovalQueue";
+import { SyncStatusBadge } from "@/components/pos/SyncStatusBadge";
+import { ConflictPanel } from "@/components/pos/ConflictPanel";
 import type { Cashier, POSProfile } from "@/types/pos";
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
@@ -31,6 +34,8 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+
+  const { pendingCount, isSyncing, circuitOpen, setCircuitOpen } = useSyncQueue();
 
   const { isWarning: idleWarning, secondsLeft, dismissWarning } = useIdleLock(
     IDLE_TIMEOUT_MS,
@@ -107,17 +112,8 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
         <span className="font-bold tracking-tight text-primary">Surge POS</span>
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
 
-          {/* Online / Offline pill */}
-          <span className={cn(
-            "flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium",
-            isOnline ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600",
-          )}>
-            <span className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              isOnline ? "bg-emerald-500" : "bg-amber-500 animate-pulse",
-            )} />
-            {isOnline ? "Online" : "Offline"}
-          </span>
+          {/* Sync status pill */}
+          <SyncStatusBadge isOnline={isOnline} pendingCount={pendingCount} isSyncing={isSyncing} />
 
           <span className="hidden sm:inline">{profile.name}</span>
           <span className="hidden sm:inline text-muted-foreground/40">·</span>
@@ -126,6 +122,11 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
           {/* Approval queue — Supervisors and Managers only */}
           {(cashier.access_level === "Supervisor" || cashier.access_level === "Manager") && (
             <ApprovalQueue accessLevel={cashier.access_level} />
+          )}
+
+          {/* Conflict panel — Managers only */}
+          {cashier.access_level === "Manager" && (
+            <ConflictPanel />
           )}
 
           {/* Switch to Desk — only for desk users */}
@@ -164,6 +165,23 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
           </button>
         </div>
       </header>
+
+      {/* Circuit breaker banner */}
+      {circuitOpen && (
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+          <span className="flex items-center gap-2">
+            <WifiOff className="h-4 w-4 shrink-0" />
+            Sync paused for 5 min due to repeated server errors. Invoices are saved and will sync automatically.
+          </span>
+          <button
+            type="button"
+            onClick={() => setCircuitOpen(false)}
+            className="rounded-md border border-red-300 bg-red-100 px-3 py-0.5 text-xs font-semibold text-red-800 hover:bg-red-200"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Idle lock warning banner */}
       {idleWarning && (

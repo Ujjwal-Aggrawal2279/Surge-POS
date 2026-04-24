@@ -64,6 +64,22 @@ def get_failed_items(offset: int = 0, limit: int = 50):
 
 
 @frappe.whitelist(allow_guest=False)
+def get_conflicts():
+	from surge.utils.permissions import require_manager_role
+
+	require_manager_role()
+
+	conflicts = frappe.get_all(
+		"Surge Sync Conflict",
+		filters={"resolution": "Pending Review"},
+		fields=["name", "client_req_id", "terminal_id", "conflict_type", "conflict_detail", "payload", "creation"],
+		order_by="creation asc",
+		limit=50,
+	)
+	return surge_response({"conflicts": conflicts})
+
+
+@frappe.whitelist(allow_guest=False)
 def retry_failed(name: str):
 	require_pos_role()
 
