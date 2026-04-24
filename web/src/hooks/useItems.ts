@@ -6,6 +6,7 @@ interface ItemsResponse {
   items: Item[];
   watermark: string | null;
   count: number;
+  tombstones?: string[];
 }
 
 interface PricesResponse {
@@ -37,10 +38,17 @@ export function useProfiles() {
 export function useItems(profile: string) {
   return useQuery({
     queryKey: ["items", profile],
-    queryFn: () =>
-      get<ItemsResponse>("surge.api.items.get_items", { profile }),
+    queryFn: async () => {
+      const res = await get<ItemsResponse>("surge.api.items.get_items", { profile });
+      if (res.tombstones?.length) {
+        const dead = new Set(res.tombstones);
+        res.items = res.items.filter((i) => !dead.has(i.item_code));
+      }
+      return res;
+    },
     staleTime: 30_000,
     gcTime: 5 * 60_000,
+    refetchInterval: 60_000,   // safety net: catches missed realtime events
   });
 }
 
@@ -51,6 +59,7 @@ export function useItemPrices(profile: string) {
       get<PricesResponse>("surge.api.items.get_item_prices", { profile }),
     staleTime: 30_000,
     gcTime: 5 * 60_000,
+    refetchInterval: 60_000,   // safety net: catches missed realtime events
   });
 }
 

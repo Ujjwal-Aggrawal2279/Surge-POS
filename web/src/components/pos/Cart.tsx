@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import {
-  Minus, Plus, X, ShoppingCart, ChevronDown,
+  Minus, Plus, X, ChevronDown,
   Percent, ReceiptText, PackageMinus,
   CirclePause, Trash2, BadgeDollarSign,
   History, RotateCcw, ArrowLeftRight,
@@ -8,9 +8,13 @@ import {
 } from "lucide-react";
 import { useCartStore } from "@/stores/cart";
 import { formatCurrency, cn } from "@/lib/utils";
+import { DiscountModal } from "./DiscountModal";
+import type { Cashier, POSProfile } from "@/types/pos";
 
 interface Props {
-  onCheckout: (paymentMode: string) => void;
+  onCheckout: (paymentMode: string, approvalToken?: string) => void;
+  cashier: Cashier;
+  posProfile: POSProfile;
   /** Mobile sheet close — omit for desktop sidebar */
   onClose?: () => void;
 }
@@ -19,22 +23,22 @@ const ACTION_ROWS: Array<Array<{
   label: string;
   bgClass: string;
   Icon: LucideIcon;
-  action?: "checkout" | "reset";
+  action?: "checkout" | "reset" | "discount" | "void";
 }>> = [
   [
-    { label: "Discount",    bgClass: "bg-[#0E9384]", Icon: Percent        },
-    { label: "Tax",         bgClass: "bg-[#6938EF]", Icon: ReceiptText    },
-    { label: "Shipping",    bgClass: "bg-[#DD2590]", Icon: PackageMinus   },
+    { label: "Discount",    bgClass: "bg-[#0E9384]", Icon: Percent,        action: "discount"  },
+    { label: "Tax",         bgClass: "bg-[#6938EF]", Icon: ReceiptText                         },
+    { label: "Shipping",    bgClass: "bg-[#DD2590]", Icon: PackageMinus                        },
   ],
   [
-    { label: "Hold",        bgClass: "bg-[#E04F16]", Icon: CirclePause    },
-    { label: "Void",        bgClass: "bg-[#155EEF]", Icon: Trash2         },
+    { label: "Hold",        bgClass: "bg-[#E04F16]", Icon: CirclePause                         },
+    { label: "Void",        bgClass: "bg-[#155EEF]", Icon: Trash2,         action: "void"      },
     { label: "Payment",     bgClass: "bg-[#06AED4]", Icon: BadgeDollarSign, action: "checkout" },
   ],
   [
-    { label: "View Orders", bgClass: "bg-[#092C4C]", Icon: History        },
-    { label: "Reset",       bgClass: "bg-[#3538CD]", Icon: RotateCcw,      action: "reset" },
-    { label: "Transaction", bgClass: "bg-[#FF0000]", Icon: ArrowLeftRight  },
+    { label: "View Orders", bgClass: "bg-[#092C4C]", Icon: History                             },
+    { label: "Reset",       bgClass: "bg-[#3538CD]", Icon: RotateCcw,      action: "reset"     },
+    { label: "Transaction", bgClass: "bg-[#FF0000]", Icon: ArrowLeftRight                      },
   ],
 ];
 
@@ -46,15 +50,29 @@ const PAYMENT_METHODS = [
   { label: "Cheque",  img: "/assets/surge/images/payment/cheque.png",  mode: "Cheque"  },
 ];
 
-export function Cart({ onCheckout, onClose }: Props) {
-  const items      = useCartStore((s) => s.items);
-  const removeItem = useCartStore((s) => s.removeItem);
-  const updateQty  = useCartStore((s) => s.updateQty);
-  const clear      = useCartStore((s) => s.clear);
-  const grandTotal = useCartStore((s) => s.grandTotalPaise());
-  const itemCount  = useCartStore((s) => s.itemCount());
+export function Cart({ onCheckout, cashier, posProfile, onClose }: Props) {
+  const items         = useCartStore((s) => s.items);
+  const removeItem    = useCartStore((s) => s.removeItem);
+  const updateQty     = useCartStore((s) => s.updateQty);
+  const updateDiscount = useCartStore((s) => s.updateDiscount);
+  const clear         = useCartStore((s) => s.clear);
+  const grandTotal    = useCartStore((s) => s.grandTotalPaise());
+  const itemCount     = useCartStore((s) => s.itemCount());
 
   const [selectedMode, setSelectedMode] = useState("Cash");
+  const [discountOpen, setDiscountOpen] = useState(false);
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
+  const [approvalToken, setApprovalToken] = useState<string | undefined>();
+
+  const discountLimitPct = useMemo(() => {
+    const limits: Record<string, number> = {
+      Cashier:    posProfile.discount_limit_cashier    ?? 5,
+      Supervisor: posProfile.discount_limit_supervisor ?? 15,
+      Manager:    posProfile.discount_limit_manager    ?? 100,
+    };
+    return limits[cashier.access_level] ?? 5;
+  }, [posProfile, cashier.access_level]);
 
   const orderNumber = useMemo(
     () => `#${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
@@ -108,7 +126,11 @@ export function Cart({ onCheckout, onClose }: Props) {
       <div className="flex-1 overflow-y-auto">
         {items.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center">
-            <ShoppingCart className="mb-2 h-20 w-20 text-[#E6EAED]" strokeWidth={1} />
+            <img
+              src="/assets/surge/images/no-products.png"
+              alt="No products selected"
+              className="mb-2 h-32 w-32 object-contain"
+            />
             <p className="text-sm font-bold text-[#646B72]">No Products Selected</p>
           </div>
         ) : (
@@ -183,10 +205,15 @@ export function Cart({ onCheckout, onClose }: Props) {
                 <button
                   key={btn.label}
                   type="button"
-                  disabled={btn.action === "checkout" && items.length === 0}
+                  disabled={
+                    (btn.action === "checkout" && items.length === 0) ||
+                    (btn.action === "discount" && !posProfile.allow_discount_change)
+                  }
                   onClick={() => {
-                    if (btn.action === "checkout") onCheckout(selectedMode);
+                    if (btn.action === "checkout") onCheckout(selectedMode, approvalToken);
                     if (btn.action === "reset") clear();
+                    if (btn.action === "discount" && posProfile.allow_discount_change) setDiscountOpen(true);
+                    if (btn.action === "void") { if (items.length > 0) setVoidOpen(true); }
                   }}
                   className={cn(
                     "flex h-7.75 flex-1 items-center justify-center gap-1.5 rounded-[5px] border border-[#E6EAED]",
@@ -232,12 +259,70 @@ export function Cart({ onCheckout, onClose }: Props) {
         <button
           type="button"
           disabled={items.length === 0}
-          onClick={() => onCheckout(selectedMode)}
+          onClick={() => onCheckout(selectedMode, approvalToken)}
           className="h-12 w-full rounded-lg bg-[#0E9384] text-sm font-bold text-white transition-opacity disabled:opacity-40 hover:bg-[#0c8175]"
         >
           Grand Total: {formatCurrency(grandTotal)}
         </button>
       </div>
+
+      {/* Discount modal */}
+      {discountOpen && (
+        <DiscountModal
+          items={items}
+          cashier={cashier}
+          discountLimitPct={discountLimitPct}
+          posProfile={posProfile.name}
+          onApply={(discounts, token) => {
+            for (const [code, paise] of Object.entries(discounts)) {
+              updateDiscount(code, paise);
+            }
+            if (token) setApprovalToken(token);
+          }}
+          onClose={() => setDiscountOpen(false)}
+        />
+      )}
+
+      {/* Void confirmation */}
+      {voidOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="mb-1 text-base font-bold text-[#212B36]">Void Transaction</h2>
+            <p className="mb-4 text-sm text-[#646B72]">
+              This will clear the current cart. Provide a reason for the audit log.
+            </p>
+            <textarea
+              rows={3}
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              placeholder="Reason for voiding…"
+              className="mb-4 w-full rounded-lg border border-[#E6EAED] px-3 py-2 text-sm text-[#212B36] outline-none focus:border-[#155EEF] resize-none"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setVoidOpen(false); setVoidReason(""); }}
+                className="flex-1 rounded-lg border border-[#E6EAED] py-2 text-sm font-medium text-[#646B72] hover:bg-muted"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={voidReason.trim().length < 3}
+                onClick={() => {
+                  clear();
+                  setApprovalToken(undefined);
+                  setVoidOpen(false);
+                  setVoidReason("");
+                }}
+                className="flex-1 rounded-lg bg-[#155EEF] py-2 text-sm font-bold text-white disabled:opacity-40 hover:bg-[#1249c4]"
+              >
+                Void
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

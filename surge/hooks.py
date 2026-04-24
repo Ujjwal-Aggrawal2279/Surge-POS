@@ -27,13 +27,13 @@ web_include_js = ["/assets/surge/js/login_inject.js"]
 # Auto-generate cashier PIN when a user is made Active on a POS Profile
 # Auto-invalidate Surge caches when ERPNext master data changes
 doc_events = {
-	"POS Profile User": {
-		"before_insert": "surge.utils.pin_hooks.auto_generate_pin",
-		"before_save": "surge.utils.pin_hooks.auto_generate_pin",
+	"POS Profile": {
+		"before_save": "surge.utils.pin_hooks.auto_generate_pins_for_profile",
 	},
 	"Item": {
 		"on_update": "surge.utils.cache_hooks.on_item_update",
 		"after_insert": "surge.utils.cache_hooks.on_item_update",
+		"on_trash": "surge.utils.cache_hooks.on_item_trash",
 	},
 	"Customer": {
 		"on_update": "surge.utils.cache_hooks.on_customer_update",
@@ -42,9 +42,18 @@ doc_events = {
 	"Bin": {
 		"on_update": "surge.utils.cache_hooks.on_bin_update",
 	},
+	"Stock Ledger Entry": {
+		"on_submit": "surge.utils.cache_hooks.on_sle_submit",
+	},
 	"Item Price": {
 		"on_update": "surge.utils.cache_hooks.on_item_price_update",
 		"after_insert": "surge.utils.cache_hooks.on_item_price_update",
+	},
+	"POS Invoice": {
+		# on_submit: safe — india_compliance does not register this event
+		"on_submit": "surge.overrides.pos_invoice.on_submit",
+		# before_cancel: require void_reason before ERPNext processes cancellation
+		"before_cancel": "surge.overrides.pos_invoice.before_cancel",
 	},
 }
 

@@ -16,13 +16,14 @@ interface SubmitArgs {
   payments: PaymentEntry[];
   customer: string;
   pos_profile: string;
+  approval_token?: string | null;
 }
 
 export function useSubmitInvoice() {
   const qc = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ items, payments, customer, pos_profile }: SubmitArgs) => {
+    mutationFn: async ({ items, payments, customer, pos_profile, approval_token }: SubmitArgs) => {
       const req: CreateInvoiceRequest = {
         client_request_id: uuidv7(),
         pos_profile,
@@ -36,6 +37,7 @@ export function useSubmitInvoice() {
         })),
         payments,
         offline: !navigator.onLine,
+        approval_token: approval_token ?? null,
       };
 
       const grand_total_paise = payments.reduce((s, p) => s + p.amount_paise, 0);

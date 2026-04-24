@@ -7,6 +7,7 @@ no_cache = 1
 
 def get_context(context):
 	context.dev_server = bool(frappe.conf.get("developer_mode") and frappe.conf.get("surge_dev_server"))
+	context.socketio_port = frappe.conf.get("socketio_port") or 9000
 
 	if frappe.session.user == "Guest":
 		# React app handles auth — serve the shell with minimal guest context

@@ -9,9 +9,10 @@ import { config, post } from "@/lib/api";
 import { clearSession } from "@/lib/session";
 import { formatCurrency, cn } from "@/lib/utils";
 import { Loader2, Lock, Monitor, ShoppingCart, LogOut, Clock } from "lucide-react";
+import { ApprovalQueue } from "@/components/pos/ApprovalQueue";
 import type { Cashier, POSProfile } from "@/types/pos";
 
-const IDLE_TIMEOUT_MS = 1 * 60 * 1000; // TODO: restore to 15 mins before prod
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 const IDLE_WARN_MS    = 15 * 1000;      // warn 15s before
 
 interface Props {
@@ -24,7 +25,8 @@ interface Props {
 export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props) {
   const cfg = config();
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [paymentMode, setPaymentMode] = useState("Cash");
+  const [paymentMode, setPaymentMode] = useState(() => profile.payment_modes?.[0] ?? "Cash");
+  const [approvalToken, setApprovalToken] = useState<string | undefined>();
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -36,8 +38,9 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
     { warnBeforeMs: IDLE_WARN_MS, disabled: paymentOpen || logoutConfirmOpen },
   );
 
-  function handleCheckout(mode: string) {
+  function handleCheckout(mode: string, token?: string) {
     setPaymentMode(mode);
+    setApprovalToken(token);
     setPaymentOpen(true);
   }
 
@@ -120,6 +123,11 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
           <span className="hidden sm:inline text-muted-foreground/40">·</span>
           <span>{cashier.full_name}</span>
 
+          {/* Approval queue — Supervisors and Managers only */}
+          {(cashier.access_level === "Supervisor" || cashier.access_level === "Manager") && (
+            <ApprovalQueue accessLevel={cashier.access_level} />
+          )}
+
           {/* Switch to Desk — only for desk users */}
           {cfg.has_desk_access === 1 && (
             <a
@@ -192,6 +200,8 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
         <aside className="hidden w-117.5 shrink-0 md:flex md:flex-col">
           <Cart
             onCheckout={handleCheckout}
+            cashier={cashier}
+            posProfile={profile}
           />
         </aside>
       </div>
@@ -228,7 +238,9 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
           />
           <div className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl bg-background shadow-2xl">
             <Cart
-              onCheckout={(mode) => { setMobileCartOpen(false); handleCheckout(mode); }}
+              onCheckout={(mode, token) => { setMobileCartOpen(false); handleCheckout(mode, token); }}
+              cashier={cashier}
+              posProfile={profile}
               onClose={() => setMobileCartOpen(false)}
             />
           </div>
@@ -239,7 +251,9 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
         open={paymentOpen}
         onClose={() => setPaymentOpen(false)}
         posProfile={profile.name}
+        paymentModes={profile.payment_modes}
         defaultMode={paymentMode}
+        approvalToken={approvalToken}
       />
 
       {/* ── Logout confirmation modal ──────────────────────────────── */}

@@ -142,9 +142,11 @@ def flush_write_queue() -> None:
 
 @frappe.whitelist(allow_guest=False)
 def resolve_conflict(conflict_name: str, resolution: str) -> dict:
-	from surge.utils.permissions import require_pos_role
+	from surge.utils.permissions import require_manager_role
 
-	require_pos_role()
+	# Force-submitting or voiding a conflicted invoice is a destructive action that
+	# bypasses stock validation — restrict to Manager/Administrator only.
+	require_manager_role()
 
 	valid_resolutions = {"Approved — Force Submit", "Rejected — Void"}
 	if resolution not in valid_resolutions:
@@ -182,6 +184,7 @@ def resolve_conflict(conflict_name: str, resolution: str) -> dict:
 			conflict.resolved_by = frappe.session.user
 			conflict.resolved_at = now_datetime()
 			conflict.resulting_invoice = invoice_name
+			# ignore_permissions: internal doctype; manager access enforced above.
 			conflict.save(ignore_permissions=True)
 			frappe.db.commit()
 
@@ -194,6 +197,7 @@ def resolve_conflict(conflict_name: str, resolution: str) -> dict:
 	conflict.resolution = resolution
 	conflict.resolved_by = frappe.session.user
 	conflict.resolved_at = now_datetime()
+	# ignore_permissions: internal doctype; manager access enforced above.
 	conflict.save(ignore_permissions=True)
 	frappe.db.commit()
 
@@ -313,6 +317,7 @@ def _create_conflict_record(entry: dict, error: ConflictError) -> None:
 	doc.conflict_detail = error.detail[:2000]
 	doc.payload = entry["payload"]
 	doc.resolution = "Pending Review"
+	# ignore_permissions: called from flush_write_queue() background job (Administrator).
 	doc.insert(ignore_permissions=True)
 
 	_safe_publish(

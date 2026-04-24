@@ -1,17 +1,44 @@
 ---
 id: making-a-sale
 title: Making a Sale
-sidebar_position: 5
+sidebar_position: 7
 ---
 
 # Making a Sale
 
-**Add items** — click a card, scan a barcode, or type in the search box.
+## Adding items
 
-**Adjust qty** — use **+** / **−** on the item card or the cart row controls. Setting qty to 0 removes the line.
+| Method | How |
+|---|---|
+| Click card | Tap any item in the grid — adds 1 qty |
+| Barcode scan | Focus search box → scan (USB / Bluetooth wedge scanner) → item auto-added |
+| Item code | Type exact item code → Enter → item auto-added |
+| Partial search | Type partial name or code → grid filters → click the card |
 
-**Filter** — use category tabs. **View All Categories** resets the filter.
+**Barcode matching is case-insensitive.** Scanning `lv2024006` matches barcode `LV2024006`.
 
-**Customer** — defaults to Walk-in. Tap **Add Customer** to link an ERPNext Customer.
+**Auto-add on Enter** only fires on an exact match (one item). Partial matches just filter the grid — no item is added automatically.
 
-When ready, click the green **Grand Total** button or the **Payment** action button.
+## Adjusting quantity
+
+- **+** / **−** buttons on the cart row.
+- Setting qty to 0 removes the line.
+
+## Filters
+
+Category tabs filter the item grid. **View All Categories** resets to show everything.
+
+## Customer
+
+Defaults to Walk-in Customer. Click **Add Customer** to link a named ERPNext Customer to the invoice.
+
+## Discounts
+
+Click **Discount** in the cart action bar.
+
+- Within your access-level limit → applied immediately, no approval needed.
+- Above your limit → triggers the [Manager Approval](manager-approvals) flow.
+
+## Checkout
+
+Click the green **Grand Total** button (or **Payment** in the action bar) to open the payment dialog.

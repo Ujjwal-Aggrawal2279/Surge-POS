@@ -17,6 +17,9 @@ def enqueue_invoice(req) -> None:
 	doc.next_retry_at = now_datetime()
 
 	try:
+		# ignore_permissions: caller (create_invoice) already validated access via
+		# require_pos_profile_access(). Surge Write Queue is an internal doctype —
+		# POS users have no direct DocType permission on it by design.
 		doc.insert(ignore_permissions=True)
 		frappe.db.commit()
 	except frappe.DuplicateEntryError:
