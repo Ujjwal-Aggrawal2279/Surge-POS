@@ -1,75 +1,77 @@
 {
-  "name": "Surge Sync Conflict",
-  "doctype": "DocType",
-  "module": "Surge Pos",
-  "is_submittable": 0,
-  "track_changes": 1,
-  "autoname": "UUID",
-  "fields": [
-    {
-      "fieldname": "client_req_id",
-      "fieldtype": "Data",
-      "label": "Client Request ID",
-      "reqd": 1,
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "terminal_id",
-      "fieldtype": "Data",
-      "label": "Terminal (User)",
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "conflict_type",
-      "fieldtype": "Select",
-      "label": "Conflict Type",
-      "options": "Insufficient Stock\nDuplicate Invoice\nCustomer Not Found\nItem Not Found\nOther",
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "resolution",
-      "fieldtype": "Select",
-      "label": "Resolution",
-      "options": "Pending Review\nApproved — Force Submit\nRejected — Void\nAuto Resolved",
-      "default": "Pending Review",
-      "in_list_view": 1
-    },
-    {
-      "fieldname": "conflict_detail",
-      "fieldtype": "Long Text",
-      "label": "Conflict Detail"
-    },
-    {
-      "fieldname": "payload",
-      "fieldtype": "Long Text",
-      "label": "Original Payload (JSON)"
-    },
-    {
-      "fieldname": "resolved_by",
-      "fieldtype": "Link",
-      "label": "Resolved By",
-      "options": "User"
-    },
-    {
-      "fieldname": "resolved_at",
-      "fieldtype": "Datetime",
-      "label": "Resolved At"
-    },
-    {
-      "fieldname": "resulting_invoice",
-      "fieldtype": "Link",
-      "label": "Resulting Invoice",
-      "options": "POS Invoice"
-    }
-  ],
-  "permissions": [
-    {
-      "role": "System Manager",
-      "read": 1, "write": 1, "create": 1
-    },
-    {
-      "role": "POS User",
-      "read": 1
-    }
-  ]
+ "name": "Surge Sync Conflict",
+ "doctype": "DocType",
+ "module": "Surge Pos",
+ "is_submittable": 0,
+ "track_changes": 1,
+ "autoname": "hash",
+ "fields": [
+  {
+   "fieldname": "client_req_id",
+   "fieldtype": "Data",
+   "label": "Client Request ID",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "terminal_id",
+   "fieldtype": "Data",
+   "label": "Terminal (User)",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "conflict_type",
+   "fieldtype": "Select",
+   "label": "Conflict Type",
+   "options": "Insufficient Stock\nDuplicate Invoice\nCustomer Not Found\nItem Not Found\nOther",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "resolution",
+   "fieldtype": "Select",
+   "label": "Resolution",
+   "options": "Pending Review\nApproved \u2014 Force Submit\nRejected \u2014 Void\nAuto Resolved",
+   "default": "Pending Review",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "conflict_detail",
+   "fieldtype": "Long Text",
+   "label": "Conflict Detail"
+  },
+  {
+   "fieldname": "payload",
+   "fieldtype": "Long Text",
+   "label": "Original Payload (JSON)"
+  },
+  {
+   "fieldname": "resolved_by",
+   "fieldtype": "Link",
+   "label": "Resolved By",
+   "options": "User"
+  },
+  {
+   "fieldname": "resolved_at",
+   "fieldtype": "Datetime",
+   "label": "Resolved At"
+  },
+  {
+   "fieldname": "resulting_invoice",
+   "fieldtype": "Link",
+   "label": "Resulting Invoice",
+   "options": "POS Invoice"
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "POS User",
+   "read": 1
+  }
+ ]
 }
