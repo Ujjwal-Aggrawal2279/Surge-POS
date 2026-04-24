@@ -6,6 +6,7 @@ Check access at the API boundary — direct SQL is safe once these pass.
 import frappe
 
 POS_ROLES = {"POS User", "System Manager", "Administrator"}
+MANAGER_ROLES = {"System Manager", "Administrator"}
 
 
 def require_pos_role() -> None:
@@ -49,6 +50,18 @@ def require_pos_profile_access(profile: str) -> None:
 	if frappe.session.user not in flat:
 		frappe.throw(
 			f"You do not have access to POS Profile '{profile}'",
+			frappe.PermissionError,
+		)
+
+
+def require_manager_role() -> None:
+	"""User must be System Manager or Administrator to perform privileged operations."""
+	if frappe.session.user == "Guest":
+		frappe.throw("Not permitted", frappe.AuthenticationError)
+	user_roles = set(frappe.get_roles(frappe.session.user))
+	if not user_roles & MANAGER_ROLES:
+		frappe.throw(
+			"This action requires Manager access",
 			frappe.PermissionError,
 		)
 

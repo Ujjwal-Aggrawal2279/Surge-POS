@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { LoginScreen } from "@/pages/LoginScreen";
 import { Loader2 } from "lucide-react";
 import { saveSession, loadSession, clearSession } from "@/lib/session";
+import { initRealtime, subscribeToSurgeEvents } from "@/lib/realtime";
 import type { Cashier, POSProfile } from "@/types/pos";
 import "./index.css";
 
@@ -120,6 +121,13 @@ function App() {
       />
     </>
   );
+}
+
+// Initialize Socket.IO immediately — sets window.frappe.realtime synchronously
+// so all components can subscribe without retry loops
+if (window.SURGE_CONFIG?.user && window.SURGE_CONFIG.user !== "Guest") {
+  initRealtime();
+  subscribeToSurgeEvents(queryClient);
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

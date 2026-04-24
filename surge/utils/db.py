@@ -32,6 +32,7 @@ def items_query(since: str = "", limit: int = 500) -> list[dict]:
         LEFT JOIN `tabItem Barcode` ib ON ib.parent = i.name
         WHERE i.disabled = 0
           AND i.is_sales_item = 1
+          AND i.has_variants = 0
           {since_clause}
         GROUP BY i.name
         ORDER BY i.modified ASC

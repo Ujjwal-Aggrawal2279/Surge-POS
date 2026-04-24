@@ -10,7 +10,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Daily Operations',
-      items: ['cashier-setup', 'making-a-sale', 'payments', 'returns-voids'],
+      items: ['cashier-setup', 'session-security', 'making-a-sale', 'payments', 'manager-approvals', 'returns-voids'],
     },
     {
       type: 'category',

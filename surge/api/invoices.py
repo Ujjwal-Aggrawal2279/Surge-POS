@@ -26,6 +26,7 @@ class CreateInvoiceRequest(msgspec.Struct, gc=False):
 	items: list[InvoiceItem]
 	payments: list[PaymentItem]
 	offline: bool = False
+	approval_token: str | None = None
 
 
 _decoder = msgspec.json.Decoder(CreateInvoiceRequest)
@@ -43,10 +44,14 @@ def create_invoice():
 
 	require_pos_profile_access(req.pos_profile)
 
+	approval_payload = _check_discount_limits(req)
+
 	grand_total_paise = sum(p.amount_paise for p in req.payments)
 
 	try:
 		invoice_name = _submit_invoice(req)
+		if approval_payload:
+			_stamp_override(invoice_name, approval_payload)
 		return surge_response(
 			{
 				"invoice_name": invoice_name,
@@ -104,7 +109,79 @@ def _submit_invoice(req: CreateInvoiceRequest) -> str:
 
 	invoice.set_missing_values()
 	invoice.calculate_taxes_and_totals()
+	# ignore_permissions: access already enforced upstream via require_pos_profile_access().
+	# POS users intentionally lack direct DocType-level Create on POS Invoice — they
+	# transact only through Surge POS, not ERPNext Desk.
 	invoice.insert(ignore_permissions=True)
 	invoice.submit()
 
 	return invoice.name
+
+
+def _check_discount_limits(req: CreateInvoiceRequest) -> dict | None:
+	"""
+	Returns the approval payload if a valid token was consumed, None if no discount
+	exceeded the limit. Raises ValidationError if discount exceeds limit with no valid token.
+	"""
+	from surge.api.auth import verify_approval_token
+
+	if not req.items:
+		return None
+
+	profile_doc = frappe.get_cached_doc("POS Profile", req.pos_profile)
+
+	# Respect ERPNext's native master switch before applying Surge role-based limits
+	any_discount = any(i.discount_paise > 0 for i in req.items)
+	if any_discount and not profile_doc.allow_discount_change:
+		frappe.throw("Discounts are disabled on this POS Profile.", frappe.ValidationError)
+
+	cashier = frappe.session.user
+	access_level = (
+		frappe.db.get_value(
+			"POS Profile User",
+			{"parent": req.pos_profile, "user": cashier, "status": "Active"},
+			"access_level",
+		)
+		or "Cashier"
+	)
+
+	limit_map = {
+		"Cashier":    float(getattr(profile_doc, "discount_limit_cashier",    5)  or 5),
+		"Supervisor": float(getattr(profile_doc, "discount_limit_supervisor", 15) or 15),
+		"Manager":    float(getattr(profile_doc, "discount_limit_manager",   100) or 100),
+	}
+	max_pct = limit_map.get(access_level, 5)
+
+	max_item_pct = 0.0
+	for item in req.items:
+		if item.rate_paise > 0 and item.discount_paise > 0:
+			pct = (item.discount_paise / item.rate_paise) * 100
+			max_item_pct = max(max_item_pct, pct)
+
+	if max_item_pct <= max_pct:
+		return None
+
+	# Discount exceeds limit — validate approval token
+	if req.approval_token:
+		payload = verify_approval_token(req.approval_token)
+		if payload and payload.get("action") == "discount_override":
+			return payload
+
+	frappe.throw(
+		f"Discount of {max_item_pct:.1f}% exceeds your {access_level} "
+		f"limit of {max_pct:.0f}%. A Supervisor or Manager must approve.",
+		frappe.ValidationError,
+		title="Approval Required",
+	)
+
+
+def _stamp_override(invoice_name: str, payload: dict) -> None:
+	frappe.db.set_value(
+		"POS Invoice",
+		invoice_name,
+		{
+			"override_approved_by": payload.get("approver"),
+			"override_approved_at": payload.get("ts"),
+			"override_reason": f"discount_override approved by {payload.get('approver')} ({payload.get('access_level')})",
+		},
+	)

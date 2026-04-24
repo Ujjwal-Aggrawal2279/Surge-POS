@@ -66,7 +66,7 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
         (i) =>
           i.item_name.toLowerCase().includes(q) ||
           i.item_code.toLowerCase().includes(q) ||
-          i.barcodes.some((b) => b.includes(q)),
+          i.barcodes.some((b) => b.toLowerCase().includes(q)),
       );
     return list;
   }, [items, search, activeGroup]);
@@ -113,6 +113,18 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
               className="h-8.5 w-64 rounded-[5px] border border-[#E6EAED] bg-white pl-8 pr-3 text-xs text-[#212B36] placeholder:text-[#A6AAAF] outline-none focus:border-[#FE9F43]"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                const q = search.trim();
+                if (!q) return;
+                const exact =
+                  filtered.find((i) => i.barcodes.some((b) => b === q)) ??
+                  filtered.find((i) => i.item_code === q);
+                if (exact) {
+                  handleAdd(exact);
+                  setSearch("");
+                }
+              }}
               autoFocus
             />
           </div>

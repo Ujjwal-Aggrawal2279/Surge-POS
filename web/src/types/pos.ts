@@ -64,6 +64,7 @@ export interface CreateInvoiceRequest {
   }[];
   payments: PaymentEntry[];
   offline: boolean;
+  approval_token?: string | null;
 }
 
 export interface SyncQueueStatus {
@@ -79,6 +80,7 @@ export interface SurgeConfig {
   user_fullname: string;
   site_name: string;
   has_desk_access: 0 | 1;
+  socketio_port: number;
 }
 
 export interface Cashier {
@@ -97,4 +99,10 @@ export interface POSProfile {
   currency: string;
   selling_price_list: string;
   company: string;
+  payment_modes: string[];
+  allow_discount_change: 0 | 1;
+  allow_rate_change: 0 | 1;
+  discount_limit_cashier: number;
+  discount_limit_supervisor: number;
+  discount_limit_manager: number;
 }
