@@ -4,14 +4,13 @@ on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [main, master]
+    branches: [main, develop]
 
 concurrency:
   group: surge-ci-${{ github.ref }}
   cancel-in-progress: true
 
 # ── Job 1: Fast Checks (~90s) ─────────────────────────────────────────────────
-# Linting, type checking, frontend build. Blocks everything else on failure.
 jobs:
   fast-checks:
     name: "Fast Checks (ruff · tsc · build)"
@@ -40,15 +39,12 @@ jobs:
             surge/utils/permissions.py \
             surge/overrides/sales_invoice.py \
             surge/jobs/queue.py
-        working-directory: apps/surge
 
       - name: Ruff lint
         run: ruff check surge/ --output-format=github
-        working-directory: apps/surge
 
       - name: Ruff format check
         run: ruff format surge/ --check
-        working-directory: apps/surge
 
       - uses: pnpm/action-setup@v4
         with:
@@ -59,21 +55,21 @@ jobs:
         with:
           node-version: "20"
           cache: pnpm
-          cache-dependency-path: apps/surge/web/pnpm-lock.yaml
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
-        working-directory: apps/surge/web
+        working-directory: web
 
       - name: TypeScript type check
         run: pnpm typecheck
-        working-directory: apps/surge/web
+        working-directory: web
 
       - name: Frontend build (bundle integrity)
         run: pnpm build
-        working-directory: apps/surge/web
+        working-directory: web
 
-# ── Job 2: AST Scan + Generate + Unit Tests ───────────────────────────────────
+# ── Job 2: AST Scan + Unit Tests ──────────────────────────────────────────────
   scan-and-unit:
     name: "AST Scan + Unit Tests (Hypothesis)"
     runs-on: ubuntu-22.04
@@ -94,12 +90,9 @@ jobs:
           python scripts/generate_tests.py
           echo "--- Generated manifest ---"
           cat surge/tests/generated/manifest.json | python3 -m json.tool --no-ensure-ascii
-        working-directory: apps/surge
 
       - name: "Step 2b — Coverage gate: every endpoint must have validation or a guard"
         run: python scripts/generate_tests.py --check-coverage
-        working-directory: apps/surge
-        # Exits 1 if any @whitelist fn has no frappe.throw AND no require_*
 
       - name: "Step 2c — Unit tests (Hypothesis, no DB required)"
         run: |
@@ -112,14 +105,13 @@ jobs:
             --cov=surge/utils \
             --cov-report=xml:coverage-unit.xml \
             --cov-report=term-missing
-        working-directory: apps/surge
 
       - name: Upload unit coverage report
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-unit
-          path: apps/surge/coverage-unit.xml
+          path: coverage-unit.xml
 
 # ── Job 3: Integration Tests (Frappe + MariaDB + Redis) ──────────────────────
   integration:
@@ -189,9 +181,9 @@ jobs:
         run: |
           cd frappe-bench
           bench get-app erpnext --branch version-15
-          bench get-app surge ${{ github.workspace }}/apps/surge
+          bench get-app surge ${{ github.workspace }}
 
-      - name: Configure Redis (skip socket, use TCP)
+      - name: Configure Redis (TCP, no socket)
         run: |
           cd frappe-bench
           cat > sites/common_site_config.json << 'EOF'
@@ -223,7 +215,7 @@ jobs:
           cd frappe-bench
           ./env/bin/pip install pytest pytest-cov hypothesis msgspec
 
-      - name: "Run integration tests — Groups A, B, C, D, E, F, G"
+      - name: "Run integration tests — Groups A–G"
         run: |
           cd frappe-bench
           ./env/bin/pytest \
@@ -247,9 +239,9 @@ jobs:
           name: coverage-integration
           path: frappe-bench/coverage-integration.xml
 
-# ── Job 4: E2E Tests (Playwright — Groups H1–H4) ─────────────────────────────
+# ── Job 4: E2E Tests (Playwright) ────────────────────────────────────────────
   e2e:
-    name: "E2E Tests (Playwright — Groups H1–H4)"
+    name: "E2E Tests (Playwright — Groups D, E, H)"
     runs-on: ubuntu-22.04
     needs: fast-checks
 
@@ -264,36 +256,34 @@ jobs:
         with:
           node-version: "20"
           cache: pnpm
-          cache-dependency-path: apps/surge/web/pnpm-lock.yaml
+          cache-dependency-path: web/pnpm-lock.yaml
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
-        working-directory: apps/surge/web
+        working-directory: web
 
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
-        working-directory: apps/surge/web
+        working-directory: web
 
-      - name: Start Vite dev server (with mocked API via route interception)
+      - name: Start Vite dev server
         run: pnpm dev &
-        working-directory: apps/surge/web
+        working-directory: web
         env:
-          VITE_API_BASE: http://localhost:8000  # intercepted by Playwright anyway
+          VITE_API_BASE: http://localhost:8000
 
-      - name: Wait for dev server to be ready
+      - name: Wait for dev server
         run: |
           timeout 30 bash -c 'until curl -sf http://localhost:5173 > /dev/null; do sleep 1; done'
 
-      - name: "Run E2E tests — H1 stale session, H2 empty modes, H3 PaymentDialog race, H4 idle lock"
+      - name: "Run E2E tests"
         run: npx playwright test e2e/ --config=e2e/playwright.config.ts
-        working-directory: apps/surge/web
-        env:
-          E2E_BASE_URL: http://localhost:5173
+        working-directory: web
 
-      - name: Upload Playwright failure screenshots and traces
+      - name: Upload Playwright failure screenshots
         uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-results
-          path: apps/surge/web/e2e/test-results/
+          path: web/e2e/test-results/
           retention-days: 7
