@@ -1,5 +1,5 @@
 import frappe
-from frappe.utils import now_datetime, nowdate, get_date_str
+from frappe.utils import get_date_str, now_datetime, nowdate
 
 from surge.utils.json import surge_response
 from surge.utils.permissions import require_pos_profile_access, require_surge_manager_role
@@ -51,20 +51,25 @@ def open_session(pos_profile: str, opening_balances: list) -> dict:
 	doc.set_opening_balances = 0
 	doc.user = frappe.session.user
 
-	for bal in (opening_balances or []):
-		doc.append("balance_details", {
-			"mode_of_payment": bal["mode_of_payment"],
-			"opening_amount": float(bal.get("amount") or 0),
-		})
+	for bal in opening_balances or []:
+		doc.append(
+			"balance_details",
+			{
+				"mode_of_payment": bal["mode_of_payment"],
+				"opening_amount": float(bal.get("amount") or 0),
+			},
+		)
 
 	doc.insert(ignore_permissions=True)
 	doc.submit()
 	frappe.db.commit()
 
-	return surge_response({
-		"session_name": doc.name,
-		"period_start_date": doc.period_start_date.isoformat(),
-	})
+	return surge_response(
+		{
+			"session_name": doc.name,
+			"period_start_date": doc.period_start_date.isoformat(),
+		}
+	)
 
 
 @frappe.whitelist(allow_guest=False)
@@ -137,8 +142,9 @@ def _build_z_report(entry, closing_balances: list, discrepancy_reason: str = "")
 
 	# Iterate union of opening and closing modes — extra closing modes appear in Z-report
 	all_modes = sorted(set(opening_map.keys()) | set(closing_map.keys()))
+
 	def _paise(amount: float) -> int:
-		return int(round(amount * 100))
+		return round(amount * 100)
 
 	modes = []
 	for mode in all_modes:
@@ -146,14 +152,16 @@ def _build_z_report(entry, closing_balances: list, discrepancy_reason: str = "")
 		sales_amt = payment_totals.get(mode, 0.0)
 		expected = opening + sales_amt
 		actual = closing_map.get(mode, 0.0)
-		modes.append({
-			"mode_of_payment": mode,
-			"opening_amount_paise": _paise(opening),
-			"sales_amount_paise": _paise(sales_amt),
-			"expected_amount_paise": _paise(expected),
-			"actual_amount_paise": _paise(actual),
-			"discrepancy_paise": _paise(actual - expected),
-		})
+		modes.append(
+			{
+				"mode_of_payment": mode,
+				"opening_amount_paise": _paise(opening),
+				"sales_amount_paise": _paise(sales_amt),
+				"expected_amount_paise": _paise(expected),
+				"actual_amount_paise": _paise(actual),
+				"discrepancy_paise": _paise(actual - expected),
+			}
+		)
 
 	return {
 		"opening_entry": entry.name,

@@ -302,7 +302,11 @@ def request_approval(pos_profile: str, approver: str, pin: str, action: str, met
 	stored = row.surge_pos_pin
 	if not stored:
 		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
-	pin_match = hmac.compare_digest(pin, stored) if _is_hashed(stored) else hmac.compare_digest(pin, _hash_pin(stored))
+	pin_match = (
+		hmac.compare_digest(pin, stored)
+		if _is_hashed(stored)
+		else hmac.compare_digest(pin, _hash_pin(stored))
+	)
 	if not pin_match:
 		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
 
@@ -489,7 +493,11 @@ def respond_to_approval(req_id: str, pin: str, decision: str) -> object:
 	stored = row.surge_pos_pin
 	if not stored:
 		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
-	pin_match = hmac.compare_digest(pin, stored) if _is_hashed(stored) else hmac.compare_digest(pin, _hash_pin(stored))
+	pin_match = (
+		hmac.compare_digest(pin, stored)
+		if _is_hashed(stored)
+		else hmac.compare_digest(pin, _hash_pin(stored))
+	)
 	if not pin_match:
 		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
 
