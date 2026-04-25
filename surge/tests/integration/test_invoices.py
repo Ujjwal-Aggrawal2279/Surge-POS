@@ -25,6 +25,7 @@ C21  Mobile checkout handleMobileCheckout stable ref (unit/E2E test)
 """
 
 import concurrent.futures
+import json
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -77,6 +78,10 @@ def _ensure_user(email, role="POS User"):
 		u.first_name = email.split("@")[0]
 		u.send_welcome_email = 0
 		u.insert(ignore_permissions=True)
+	if role and not frappe.db.exists("Has Role", {"parent": email, "role": role}):
+		doc = frappe.get_doc("User", email)
+		doc.append("roles", {"role": role})
+		doc.save(ignore_permissions=True)
 	frappe.db.commit()
 
 
@@ -315,7 +320,7 @@ class TestDiscountApproval(InvoiceTestBase):
 
 	def test_C14_supervisor_pin_issues_approval_token(self):
 		"""C14: Supervisor/Manager PIN → approval token issued."""
-		result = frappe.parse_json(
+		result = json.loads(
 			request_approval(
 				pos_profile=_PROFILE,
 				approver=_MANAGER,
@@ -328,7 +333,7 @@ class TestDiscountApproval(InvoiceTestBase):
 
 	def test_C16_reuse_approval_token_rejected(self):
 		"""C16: Same token used twice → second use rejected (burn-after-use)."""
-		result = frappe.parse_json(
+		result = json.loads(
 			request_approval(
 				pos_profile=_PROFILE,
 				approver=_MANAGER,
@@ -366,7 +371,7 @@ class TestDiscountApproval(InvoiceTestBase):
 	def test_C18_meta_capped_at_500_chars(self):
 		"""C18: meta=1MB string → stored as max 500 chars in Redis payload."""
 		big_meta = "X" * 1_000_000
-		result = frappe.parse_json(
+		result = json.loads(
 			request_approval(
 				pos_profile=_PROFILE,
 				approver=_MANAGER,
@@ -378,7 +383,6 @@ class TestDiscountApproval(InvoiceTestBase):
 		if result["status"] == "ok":
 			token = result["token"]
 			import base64
-			import json
 
 			data, _ = token.rsplit(".", 1)
 			payload = json.loads(base64.urlsafe_b64decode(data + "=="))

@@ -50,6 +50,10 @@ def _ensure_user(email):
 		u.first_name = email.split("@")[0]
 		u.send_welcome_email = 0
 		u.insert(ignore_permissions=True)
+	if not frappe.db.exists("Has Role", {"parent": email, "role": "POS User"}):
+		doc = frappe.get_doc("User", email)
+		doc.append("roles", {"role": "POS User"})
+		doc.save(ignore_permissions=True)
 		frappe.db.commit()
 
 

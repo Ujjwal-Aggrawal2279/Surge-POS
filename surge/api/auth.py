@@ -163,7 +163,7 @@ def override_lockout(
 
 	supervisor = frappe.session.user
 
-	result = frappe.parse_json(verify_pin(pos_profile=pos_profile, user=supervisor, pin=supervisor_pin).data)
+	result = json.loads(verify_pin(pos_profile=pos_profile, user=supervisor, pin=supervisor_pin).data)
 	if result.get("status") != "ok":
 		return surge_response(result)
 

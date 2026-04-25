@@ -31,6 +31,7 @@ E16  Cancel close → session stays Open
 E17  After close, get_active_session returns None
 """
 
+import json
 import threading
 from datetime import date, datetime, timedelta
 
@@ -124,7 +125,7 @@ def _open(balances=None, user=None):
 	u = user or _MANAGER
 	frappe.set_user(u)
 	try:
-		return frappe.parse_json(open_session(_PROFILE, balances).data)
+		return json.loads(open_session(_PROFILE, balances).data)
 	finally:
 		frappe.set_user("Administrator")
 
@@ -134,7 +135,7 @@ def _close(entry_name, balances=None, reason="", user=None):
 	u = user or _MANAGER
 	frappe.set_user(u)
 	try:
-		return frappe.parse_json(close_session(entry_name, balances, reason).data)
+		return json.loads(close_session(entry_name, balances, reason).data)
 	finally:
 		frappe.set_user("Administrator")
 
@@ -159,7 +160,7 @@ class TestShiftOpen(FrappeTestCase):
 		"""B01: No open entry → get_active_session returns session=None."""
 		frappe.set_user(_MANAGER)
 		try:
-			result = frappe.parse_json(get_active_session(_PROFILE).data)
+			result = json.loads(get_active_session(_PROFILE).data)
 		finally:
 			frappe.set_user("Administrator")
 		self.assertIsNone(result["session"])
@@ -171,7 +172,7 @@ class TestShiftOpen(FrappeTestCase):
 		opened = _open()
 		frappe.set_user(_MANAGER)
 		try:
-			result = frappe.parse_json(get_active_session(_PROFILE).data)
+			result = json.loads(get_active_session(_PROFILE).data)
 		finally:
 			frappe.set_user("Administrator")
 		self.assertIsNotNone(result["session"])
@@ -187,7 +188,7 @@ class TestShiftOpen(FrappeTestCase):
 
 		frappe.set_user(_MANAGER)
 		try:
-			result = frappe.parse_json(get_active_session(_PROFILE).data)
+			result = json.loads(get_active_session(_PROFILE).data)
 		finally:
 			frappe.set_user("Administrator")
 		self.assertIsNone(result["session"])
@@ -340,9 +341,7 @@ class TestShiftClose(FrappeTestCase):
 		def try_close():
 			try:
 				frappe.set_user(_MANAGER)
-				r = frappe.parse_json(
-					close_session(entry_name, [{"mode_of_payment": "Cash", "amount": 0}]).data
-				)
+				r = json.loads(close_session(entry_name, [{"mode_of_payment": "Cash", "amount": 0}]).data)
 				results.append(r)
 			except Exception as e:
 				errors.append(str(e))
@@ -401,7 +400,7 @@ class TestShiftClose(FrappeTestCase):
 		opened = _open()
 		frappe.set_user(_SYSMANAGER)
 		try:
-			result = frappe.parse_json(
+			result = json.loads(
 				close_session(opened["session_name"], [{"mode_of_payment": "Cash", "amount": 0}]).data
 			)
 		finally:
@@ -413,7 +412,7 @@ class TestShiftClose(FrappeTestCase):
 		"""E15: Administrator can always close sessions."""
 		opened = _open()
 		# Administrator is the default — just call directly
-		result = frappe.parse_json(
+		result = json.loads(
 			close_session(opened["session_name"], [{"mode_of_payment": "Cash", "amount": 0}]).data
 		)
 		self.assertIn("z_report", result)
@@ -434,7 +433,7 @@ class TestShiftClose(FrappeTestCase):
 		_close(opened["session_name"])
 		frappe.set_user(_MANAGER)
 		try:
-			result = frappe.parse_json(get_active_session(_PROFILE).data)
+			result = json.loads(get_active_session(_PROFILE).data)
 		finally:
 			frappe.set_user("Administrator")
 		self.assertIsNone(result["session"])

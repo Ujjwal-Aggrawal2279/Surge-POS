@@ -17,6 +17,7 @@ A13  No PIN set — returns no_pin
 A14  Disabled user login — returns invalid
 """
 
+import json
 import threading
 import time
 
@@ -68,6 +69,10 @@ def _ensure_user(email: str, enabled: int = 1) -> str:
 		u.insert(ignore_permissions=True)
 	else:
 		frappe.db.set_value("User", email, "enabled", enabled)
+	if enabled and not frappe.db.exists("Has Role", {"parent": email, "role": "POS User"}):
+		doc = frappe.get_doc("User", email)
+		doc.append("roles", {"role": "POS User"})
+		doc.save(ignore_permissions=True)
 	frappe.db.commit()
 	return email
 
@@ -147,7 +152,7 @@ class AuthTestBase(FrappeTestCase):
 
 class TestPINLogin(AuthTestBase):
 	def _verify(self, user=_CASHIER, pin=_TEST_PIN_HASH):
-		return frappe.parse_json(verify_pin(_TEST_PROFILE, user, pin).data)
+		return json.loads(verify_pin(_TEST_PROFILE, user, pin).data)
 
 	# A01
 	def test_A01_happy_login_correct_pin(self):
@@ -183,7 +188,7 @@ class TestPINLogin(AuthTestBase):
 		results = []
 
 		def try_wrong():
-			r = frappe.parse_json(verify_pin(_TEST_PROFILE, _CASHIER, wrong).data)
+			r = json.loads(verify_pin(_TEST_PROFILE, _CASHIER, wrong).data)
 			results.append(r["status"])
 
 		threads = [threading.Thread(target=try_wrong) for _ in range(PIN_MAX_ATTEMPTS)]
@@ -216,7 +221,7 @@ class TestPINLogin(AuthTestBase):
 			self._verify(pin=wrong)
 		self.assertTrue(_is_locked(_CASHIER, _TEST_PROFILE))
 
-		result = frappe.parse_json(override_lockout(_CASHIER, _TEST_PIN_HASH, _TEST_PROFILE).data)
+		result = json.loads(override_lockout(_CASHIER, _TEST_PIN_HASH, _TEST_PROFILE).data)
 		# Note: override_lockout is called as the supervisor
 		# The function internally calls verify_pin for the supervisor
 		self.assertEqual(result["status"], "ok")
@@ -232,7 +237,7 @@ class TestPINLogin(AuthTestBase):
 		# Another cashier (not supervisor) tries to override
 		# override_lockout first verifies the supervisor's PIN, then checks access_level
 		# Since _CASHIER has access_level=Cashier, this should fail
-		result = frappe.parse_json(override_lockout(_CASHIER, _TEST_PIN_HASH, _TEST_PROFILE).data)
+		result = json.loads(override_lockout(_CASHIER, _TEST_PIN_HASH, _TEST_PROFILE).data)
 		# The supervisor in this call IS the cashier — access_level Cashier
 		# frappe.session.user is Administrator here, but the supervisor param is checked
 		self.assertIn(result["status"], ("forbidden", "ok"))
@@ -241,7 +246,7 @@ class TestPINLogin(AuthTestBase):
 	# A08
 	def test_A08_forgot_pin_returns_generic_response(self):
 		"""A08: forgot_pin always returns generic response — no user disclosure."""
-		result = frappe.parse_json(forgot_pin(_CASHIER, _TEST_PROFILE).data)
+		result = json.loads(forgot_pin(_CASHIER, _TEST_PROFILE).data)
 		# Generic message regardless of whether user exists
 		self.assertEqual(result["status"], "ok")
 		# Message should not disclose whether user was found
@@ -252,9 +257,9 @@ class TestPINLogin(AuthTestBase):
 	def test_A09_forgot_pin_rate_limit(self):
 		"""A09: Second forgot_pin within rate limit → same generic response, no extra notification."""
 		# First call
-		r1 = frappe.parse_json(forgot_pin(_CASHIER, _TEST_PROFILE).data)
+		r1 = json.loads(forgot_pin(_CASHIER, _TEST_PROFILE).data)
 		# Second call immediately
-		r2 = frappe.parse_json(forgot_pin(_CASHIER, _TEST_PROFILE).data)
+		r2 = json.loads(forgot_pin(_CASHIER, _TEST_PROFILE).data)
 		# Both return ok (generic)
 		self.assertEqual(r1["status"], "ok")
 		self.assertEqual(r2["status"], "ok")
@@ -266,7 +271,7 @@ class TestPINLogin(AuthTestBase):
 		"""A10: Manager sets PIN "5678" → DB stores 64-char hex, not "5678"."""
 		frappe.set_user(_MANAGER)
 		try:
-			frappe.parse_json(set_pin(_CASHIER, "5678", _TEST_PROFILE).data)
+			json.loads(set_pin(_CASHIER, "5678", _TEST_PROFILE).data)
 		finally:
 			frappe.set_user("Administrator")
 
@@ -352,6 +357,6 @@ class TestPINLogin(AuthTestBase):
 		frappe.db.set_value("User", _DISABLED_USER, "enabled", 0)
 		frappe.db.commit()
 
-		result = frappe.parse_json(verify_pin(_TEST_PROFILE, _DISABLED_USER, _TEST_PIN_HASH).data)
+		result = json.loads(verify_pin(_TEST_PROFILE, _DISABLED_USER, _TEST_PIN_HASH).data)
 		self.assertEqual(result["status"], "invalid")
 		self.assertNotEqual(result["status"], "locked")
