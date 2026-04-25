@@ -100,10 +100,7 @@ jobs:
             -v \
             --tb=short \
             --hypothesis-seed=0 \
-            --cov=surge/api/auth \
-            --cov=surge/utils \
-            --cov-report=xml:coverage-unit.xml \
-            --cov-report=term-missing
+            --no-cov
 
       - name: Upload unit coverage report
         uses: actions/upload-artifact@v4
