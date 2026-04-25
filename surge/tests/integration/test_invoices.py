@@ -173,10 +173,10 @@ def _force_delete_invoice(name: str):
 	"""Hard-delete a Sales Invoice and all linked accounting rows via raw SQL."""
 	# Remove child GL/ledger rows first so the parent delete has no FK blockers
 	for table in ("tabGL Entry", "tabPayment Ledger Entry"):
-		frappe.db.sql(f"DELETE FROM `{table}` WHERE voucher_no = %s", name)  # noqa: S608
+		frappe.db.sql(f"DELETE FROM `{table}` WHERE voucher_no = %s", name)
 	for table in ("tabSales Invoice Item", "tabSales Invoice Payment", "tabSales Taxes and Charges"):
-		frappe.db.sql(f"DELETE FROM `{table}` WHERE parent = %s", name)  # noqa: S608
-	frappe.db.sql("DELETE FROM `tabSales Invoice` WHERE name = %s", name)  # noqa: S608
+		frappe.db.sql(f"DELETE FROM `{table}` WHERE parent = %s", name)
+	frappe.db.sql("DELETE FROM `tabSales Invoice` WHERE name = %s", name)
 
 
 def _cleanup_test_invoices():
