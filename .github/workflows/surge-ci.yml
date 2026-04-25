@@ -177,6 +177,7 @@ jobs:
         run: |
           cd frappe-bench
           bench get-app erpnext --branch version-15
+          bench get-app india_compliance --branch version-15
           bench get-app surge ${{ github.workspace }}
 
       - name: Configure Redis (TCP, no socket)
@@ -201,6 +202,7 @@ jobs:
             --admin-password admin \
             --no-mariadb-socket
           bench --site test.localhost install-app erpnext
+          bench --site test.localhost install-app india_compliance
           bench --site test.localhost install-app surge
           bench --site test.localhost migrate
         env:
