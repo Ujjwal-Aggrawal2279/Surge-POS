@@ -40,7 +40,12 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import get_date_str, now_datetime, nowdate
 
 from surge.api.session import _build_z_report, close_session, get_active_session, open_session
-from surge.tests.integration._base import ensure_master_data
+from surge.tests.integration._base import (
+	TEST_COMPANY,
+	TEST_PRICE_LIST,
+	TEST_WAREHOUSE,
+	ensure_master_data,
+)
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -76,14 +81,12 @@ def _create_test_profile(modes=None):
 	if frappe.db.exists("POS Profile", _PROFILE):
 		return
 	modes = modes or ["Cash", "UPI"]
-	company = frappe.db.get_single_value("Global Defaults", "default_company")
-	wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 	avail_modes = frappe.get_all("Mode of Payment", pluck="name")
 	p = frappe.new_doc("POS Profile")
 	p.name = _PROFILE
-	p.company = company
-	p.warehouse = wh
-	p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
+	p.company = TEST_COMPANY
+	p.warehouse = TEST_WAREHOUSE
+	p.selling_price_list = TEST_PRICE_LIST
 	for i, m in enumerate(modes):
 		if m in avail_modes:
 			p.append("payments", {"mode_of_payment": m, "default": 1 if i == 0 else 0})
