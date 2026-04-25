@@ -17,7 +17,12 @@ G11  Supervisor-level user fails require_surge_manager_role (Supervisor ≠ Mana
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from surge.tests.integration._base import ensure_master_data
+from surge.tests.integration._base import (
+	TEST_COMPANY,
+	TEST_PRICE_LIST,
+	TEST_WAREHOUSE,
+	ensure_master_data,
+)
 from surge.utils.permissions import (
 	require_pos_profile_access,
 	require_surge_manager_role,
@@ -61,13 +66,11 @@ def _make_profile(name, users=None, warehouse=None):
 	if frappe.db.exists("POS Profile", name):
 		frappe.delete_doc("POS Profile", name, ignore_permissions=True, force=True)
 		frappe.db.commit()
-	company = frappe.db.get_single_value("Global Defaults", "default_company")
-	wh = warehouse or frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 	p = frappe.new_doc("POS Profile")
 	p.name = name
-	p.company = company
-	p.warehouse = wh
-	p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
+	p.company = TEST_COMPANY
+	p.warehouse = warehouse or TEST_WAREHOUSE
+	p.selling_price_list = TEST_PRICE_LIST
 	for m in frappe.get_all("Mode of Payment", limit=1, pluck="name"):
 		p.append("payments", {"mode_of_payment": m, "default": 1})
 	for u in users or []:
@@ -186,12 +189,9 @@ class TestProfileAccess(PermissionsTestBase):
 class TestWarehouseAccess(PermissionsTestBase):
 	def test_G07_cross_terminal_warehouse_denied(self):
 		"""G07: Warehouse linked only to a profile the user cannot access → PermissionError."""
-		company = frappe.db.get_single_value("Global Defaults", "default_company")
-		# Pick any warehouse — make a locked profile so _UNLISTED_USER cannot access it
-		wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 		_make_profile(
 			"_GPermWHProfile",
-			warehouse=wh,
+			warehouse=TEST_WAREHOUSE,
 			users=[
 				{"user": _ACTIVE_USER, "status": "Active"},
 			],
@@ -199,7 +199,7 @@ class TestWarehouseAccess(PermissionsTestBase):
 		frappe.set_user(_UNLISTED_USER)
 		try:
 			with self.assertRaises(frappe.PermissionError):
-				require_warehouse_access(wh)
+				require_warehouse_access(TEST_WAREHOUSE)
 		finally:
 			frappe.set_user("Administrator")
 			frappe.delete_doc("POS Profile", "_GPermWHProfile", ignore_permissions=True, force=True)

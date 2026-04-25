@@ -27,7 +27,14 @@ from surge.api.invoices import (
 	_submit_invoice,
 )
 from surge.overrides.sales_invoice import on_submit as inv_on_submit
-from surge.tests.integration._base import TEST_HSN, ensure_master_data
+from surge.tests.integration._base import (
+	TEST_COMPANY,
+	TEST_HSN,
+	TEST_ITEM_GROUP,
+	TEST_PRICE_LIST,
+	TEST_WAREHOUSE,
+	ensure_master_data,
+)
 
 _PROFILE = "_HSecProfile"
 _CASHIER = "h_cashier@test.surge"
@@ -46,14 +53,12 @@ def _ensure_user(email):
 
 def _setup():
 	ensure_master_data()
-	company = frappe.db.get_single_value("Global Defaults", "default_company")
-	wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 
 	if not frappe.db.exists("Item", _TEST_ITEM):
 		item = frappe.new_doc("Item")
 		item.item_code = _TEST_ITEM
 		item.item_name = "Surge Security Test Item"
-		item.item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name")
+		item.item_group = TEST_ITEM_GROUP
 		item.stock_uom = "Nos"
 		item.gst_hsn_code = TEST_HSN
 		item.is_stock_item = 1
@@ -63,9 +68,9 @@ def _setup():
 		modes = frappe.get_all("Mode of Payment", limit=1, pluck="name")
 		p = frappe.new_doc("POS Profile")
 		p.name = _PROFILE
-		p.company = company
-		p.warehouse = wh
-		p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
+		p.company = TEST_COMPANY
+		p.warehouse = TEST_WAREHOUSE
+		p.selling_price_list = TEST_PRICE_LIST
 		for m in modes:
 			p.append("payments", {"mode_of_payment": m, "default": 1})
 		p.append(

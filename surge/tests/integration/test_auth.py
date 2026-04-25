@@ -38,7 +38,12 @@ from surge.api.auth import (
 	set_pin,
 	verify_pin,
 )
-from surge.tests.integration._base import ensure_master_data
+from surge.tests.integration._base import (
+	TEST_COMPANY,
+	TEST_PRICE_LIST,
+	TEST_WAREHOUSE,
+	ensure_master_data,
+)
 
 # ── Fixture helpers ───────────────────────────────────────────────────────────
 
@@ -103,14 +108,12 @@ class AuthTestBase(FrappeTestCase):
 
 		# Create test profile if needed
 		if not frappe.db.exists("POS Profile", _TEST_PROFILE):
-			company = frappe.db.get_single_value("Global Defaults", "default_company")
-			wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 			modes = frappe.get_all("Mode of Payment", limit=1, pluck="name")
 			p = frappe.new_doc("POS Profile")
 			p.name = _TEST_PROFILE
-			p.company = company
-			p.warehouse = wh
-			p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
+			p.company = TEST_COMPANY
+			p.warehouse = TEST_WAREHOUSE
+			p.selling_price_list = TEST_PRICE_LIST
 			for m in modes:
 				p.append("payments", {"mode_of_payment": m, "default": 1})
 			p.insert(ignore_permissions=True)

@@ -43,7 +43,16 @@ from surge.api.invoices import (
 	_submit_invoice,
 )
 from surge.jobs.queue import enqueue_invoice
-from surge.tests.integration._base import TEST_HSN, ensure_master_data
+from surge.tests.integration._base import (
+	TEST_COMPANY,
+	TEST_CUSTOMER_GROUP,
+	TEST_HSN,
+	TEST_ITEM_GROUP,
+	TEST_PRICE_LIST,
+	TEST_TERRITORY,
+	TEST_WAREHOUSE,
+	ensure_master_data,
+)
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -71,8 +80,6 @@ def _ensure_user(email, role="POS User"):
 
 def _setup_fixtures():
 	ensure_master_data()
-	company = frappe.db.get_single_value("Global Defaults", "default_company")
-	wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 	avail_modes = frappe.get_all("Mode of Payment", pluck="name")
 
 	# Test item
@@ -80,7 +87,7 @@ def _setup_fixtures():
 		item = frappe.new_doc("Item")
 		item.item_code = _TEST_ITEM
 		item.item_name = "Surge Test Item"
-		item.item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name")
+		item.item_group = TEST_ITEM_GROUP
 		item.stock_uom = "Nos"
 		item.gst_hsn_code = TEST_HSN
 		item.is_stock_item = 1
@@ -90,17 +97,17 @@ def _setup_fixtures():
 	if not frappe.db.exists("Customer", _TEST_CUSTOMER):
 		c = frappe.new_doc("Customer")
 		c.customer_name = _TEST_CUSTOMER
-		c.customer_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name")
-		c.territory = frappe.db.get_value("Territory", {"is_group": 0}, "name")
+		c.customer_group = TEST_CUSTOMER_GROUP
+		c.territory = TEST_TERRITORY
 		c.insert(ignore_permissions=True)
 
 	# Profile
 	if not frappe.db.exists("POS Profile", _PROFILE):
 		p = frappe.new_doc("POS Profile")
 		p.name = _PROFILE
-		p.company = company
-		p.warehouse = wh
-		p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
+		p.company = TEST_COMPANY
+		p.warehouse = TEST_WAREHOUSE
+		p.selling_price_list = TEST_PRICE_LIST
 		p.allow_discount_change = 1
 		p.discount_limit_cashier = 5
 		p.discount_limit_supervisor = 15
@@ -124,7 +131,6 @@ def _setup_fixtures():
 		p.insert(ignore_permissions=True)
 
 	frappe.db.commit()
-	return wh
 
 
 def _make_req(items=None, payments=None, req_id=None, token=None):
@@ -152,7 +158,7 @@ class InvoiceTestBase(FrappeTestCase):
 		super().setUpClass()
 		for u in [_CASHIER, _MANAGER, _OTHER_CASHIER]:
 			_ensure_user(u)
-		cls._wh = _setup_fixtures()
+		_setup_fixtures()
 
 	def _submit(self, req):
 		frappe.flags.ignore_permissions = True

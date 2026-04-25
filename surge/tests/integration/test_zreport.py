@@ -22,13 +22,14 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime, nowdate
 
 from surge.api.session import _build_z_report
-from surge.tests.integration._base import ensure_master_data
+from surge.tests.integration._base import (
+	TEST_COMPANY,
+	TEST_PRICE_LIST,
+	TEST_WAREHOUSE,
+	ensure_master_data,
+)
 
 _PROFILE = "_ZReportProfile"
-
-
-def _get_company():
-	return frappe.db.get_single_value("Global Defaults", "default_company")
 
 
 def _make_entry(balance_details=None, period_start=None):
@@ -45,7 +46,7 @@ def _make_entry(balance_details=None, period_start=None):
 
 def _insert_invoice(grand_total, is_return=0, modes=None, posting_date=None, tax=0.0):
 	name = f"TEST-ZINV-{uuid.uuid4().hex[:8].upper()}"
-	company = _get_company()
+	company = TEST_COMPANY
 	ts = now_datetime()
 	frappe.db.sql(
 		"""INSERT INTO `tabSales Invoice`
@@ -105,13 +106,11 @@ class ZReportBase(FrappeTestCase):
 		super().setUpClass()
 		ensure_master_data()
 		if not frappe.db.exists("POS Profile", _PROFILE):
-			company = _get_company()
-			wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 			p = frappe.new_doc("POS Profile")
 			p.name = _PROFILE
-			p.company = company
-			p.warehouse = wh
-			p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
+			p.company = TEST_COMPANY
+			p.warehouse = TEST_WAREHOUSE
+			p.selling_price_list = TEST_PRICE_LIST
 			for i, m in enumerate(frappe.get_all("Mode of Payment", limit=2, pluck="name")):
 				p.append("payments", {"mode_of_payment": m, "default": 1 if i == 0 else 0})
 			p.insert(ignore_permissions=True)
