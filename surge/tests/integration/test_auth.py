@@ -271,6 +271,17 @@ class TestPINLogin(AuthTestBase):
 		# Restore original PIN
 		_add_to_profile(_CASHIER, "Cashier", _TEST_PIN_HASH)
 
+	# A10b
+	def test_A10b_set_pin_invalid_format_raises(self):
+		"""A10b: set_pin with non-numeric PIN → ValidationError 'PIN must be 4-8 numeric digits'."""
+		frappe.set_user(_MANAGER)
+		try:
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				set_pin(_CASHIER, "abc", _TEST_PROFILE)
+			self.assertIn("4-8 numeric digits", str(ctx.exception))
+		finally:
+			frappe.set_user("Administrator")
+
 	# A11
 	def test_A11_plaintext_pin_migration(self):
 		"""A11: Cashier with plaintext PIN logs in → succeeds + auto-upgraded to hash."""
