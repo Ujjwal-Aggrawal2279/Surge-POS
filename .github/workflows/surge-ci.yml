@@ -111,14 +111,16 @@ jobs:
 
 # ── Job 3: Integration Tests (Frappe + MariaDB + Redis) ──────────────────────
   integration:
-    name: "Integration Tests (${{ matrix.frappe_branch }})"
+    name: "Integration Tests (Frappe ${{ matrix.frappe_branch }})"
     runs-on: ubuntu-22.04
     needs: fast-checks
 
     strategy:
       fail-fast: false
       matrix:
-        frappe_branch: [version-15, version-16]
+        include:
+          - frappe_branch: version-16
+            python_version: "3.12"
 
     services:
       mariadb:
@@ -151,7 +153,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python_version }}
           cache: pip
 
       - name: Install system dependencies
