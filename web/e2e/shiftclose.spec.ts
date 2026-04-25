@@ -67,7 +67,7 @@ async function interceptAPI(
 }
 
 async function goToSellScreen(page: import("@playwright/test").Page) {
-  await page.goto("/surge");
+  await page.goto("/");
   const pinInput = page.locator("input[type='password'], input[data-testid='pin-input']").first();
   if (await pinInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await pinInput.fill("1234");

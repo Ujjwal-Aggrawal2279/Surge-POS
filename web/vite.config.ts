@@ -4,8 +4,8 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 export default defineConfig({
-  // Chunks are served from /assets/surge/dist/ — must match so dynamic imports resolve correctly
-  base: "/assets/surge/dist/",
+  // Production: served from Frappe's asset path. CI E2E: set VITE_BASE=/ so assets resolve locally.
+  base: process.env.VITE_BASE ?? "/assets/surge/dist/",
   plugins: [
     react({
       babel: {
