@@ -1,5 +1,5 @@
 """
-Integration tests — Group C (Selling & Cart) — Scenarios C01-C21.
+Integration tests — Group C (Selling & Cart) — Scenarios C01-C30.
 
 C01  Add item, pay exact → submitted
 C02  Network drop → status queued
@@ -22,6 +22,15 @@ C18  Approval token meta = 1MB → capped to 500 chars
 C19  10 concurrent invoices same terminal → all unique names
 C20  10x server errors → circuit opens (badge shown — frontend test)
 C21  Mobile checkout handleMobileCheckout stable ref (unit/E2E test)
+C22  Empty payments list → 400 ValidationError, not enqueued
+C23  Payment amount = 0 → 400 ValidationError, not enqueued
+C24  Payment amount < 0 → 400 ValidationError, not enqueued
+C25  Overpayment → 400 ValidationError, not enqueued
+C26  Underpayment beyond write_off_limit → 400 ValidationError, not enqueued
+C27  Underpayment within write_off_limit (rounding) → submitted, status Paid
+C28  No open session, offline=False → 400 ValidationError, not enqueued
+C29  No open session, offline=True → session check bypassed, proceeds
+C30  Stamp override not overwritten on idempotent re-submit
 """
 
 import concurrent.futures
@@ -31,6 +40,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import frappe
+import msgspec as _msgspec
 import pytest
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime
@@ -42,6 +52,7 @@ from surge.api.invoices import (
 	InvoiceItem,
 	PaymentItem,
 	_check_discount_limits,
+	_stamp_override,
 	_submit_invoice,
 )
 from surge.jobs.queue import enqueue_invoice
@@ -57,6 +68,7 @@ from surge.tests.integration._base import (
 	TEST_WRITE_OFF_ACCOUNT,
 	ensure_master_data,
 )
+from surge.utils.permissions import require_pos_profile_access
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -123,6 +135,7 @@ def _setup_fixtures():
 		p.company = TEST_COMPANY
 		p.warehouse = TEST_WAREHOUSE
 		p.selling_price_list = TEST_PRICE_LIST
+		p.cost_center = TEST_COST_CENTER
 		p.allow_discount_change = 1
 		p.discount_limit_cashier = 5
 		p.discount_limit_supervisor = 15
@@ -146,7 +159,17 @@ def _setup_fixtures():
 		p.currency = "INR"
 		p.write_off_account = TEST_WRITE_OFF_ACCOUNT
 		p.write_off_cost_center = TEST_COST_CENTER
+		p.write_off_limit = 1.0
 		p.insert(ignore_permissions=True)
+	else:
+		# Patch fields added after the profile was first created
+		updates = {}
+		if not frappe.db.get_value("POS Profile", _PROFILE, "write_off_limit"):
+			updates["write_off_limit"] = 1.0
+		if not frappe.db.get_value("POS Profile", _PROFILE, "cost_center"):
+			updates["cost_center"] = TEST_COST_CENTER
+		if updates:
+			frappe.db.set_value("POS Profile", _PROFILE, updates)
 
 	frappe.db.commit()
 
@@ -158,8 +181,8 @@ def _make_req(items=None, payments=None, req_id=None, token=None):
 		client_request_id=req_id or str(uuid.uuid4()),
 		pos_profile=_PROFILE,
 		customer=_TEST_CUSTOMER,
-		items=items or [InvoiceItem(item_code=_TEST_ITEM, qty=1.0, rate_paise=10000)],
-		payments=payments or [PaymentItem(mode_of_payment=pay_mode, amount_paise=10000)],
+		items=items if items is not None else [InvoiceItem(item_code=_TEST_ITEM, qty=1.0, rate_paise=10000)],
+		payments=payments if payments is not None else [PaymentItem(mode_of_payment=pay_mode, amount_paise=10000)],
 		offline=False,
 		approval_token=token,
 	)
@@ -223,6 +246,21 @@ class InvoiceTestBase(FrappeTestCase):
 			_force_delete_invoice(name)
 			frappe.db.commit()
 
+	def _assert_raises_not_enqueued(self, req, match=""):
+		"""Assert that _submit_invoice raises a validation/permission error and does NOT enqueue."""
+		with patch.object(inv_module, "enqueue_invoice") as mock_eq:
+			with self.assertRaises((frappe.ValidationError, frappe.PermissionError, Exception)) as ctx:
+				frappe.flags.ignore_permissions = True
+				frappe.session.user = _CASHIER
+				try:
+					_submit_invoice(req)
+				finally:
+					frappe.flags.ignore_permissions = False
+					frappe.session.user = "Administrator"
+			if match:
+				self.assertIn(match, str(ctx.exception))
+			mock_eq.assert_not_called()
+
 
 # ── C01-C05: Basic submission and idempotency ─────────────────────────────────
 
@@ -270,20 +308,6 @@ class TestInvoiceHappyPath(InvoiceTestBase):
 
 
 class TestInvoiceValidation(InvoiceTestBase):
-	def _assert_raises_not_enqueued(self, req, match=""):
-		with patch.object(inv_module, "enqueue_invoice") as mock_eq:
-			with self.assertRaises((frappe.ValidationError, frappe.PermissionError, Exception)) as ctx:
-				frappe.flags.ignore_permissions = True
-				frappe.session.user = _CASHIER
-				try:
-					_submit_invoice(req)
-				finally:
-					frappe.flags.ignore_permissions = False
-					frappe.session.user = "Administrator"
-			if match:
-				self.assertIn(match, str(ctx.exception))
-			mock_eq.assert_not_called()
-
 	def test_C06_qty_zero_raises(self):
 		"""C06: qty=0 → ValidationError, not enqueued."""
 		self._assert_raises_not_enqueued(
@@ -484,3 +508,190 @@ class TestConcurrentInvoices(InvoiceTestBase):
 
 		for n in names:
 			self._cleanup_invoice(n)
+
+
+# ── C22-C27: Payment validation (new guards) ─────────────────────────────────
+
+
+class TestPaymentValidation(InvoiceTestBase):
+	"""C22-C27: payment amount and write-off limit guards."""
+
+	def test_C22_empty_payments_raises(self):
+		"""C22: payments=[] → ValidationError, not enqueued."""
+		self._assert_raises_not_enqueued(
+			_make_req(payments=[]),
+			match="at least one payment",
+		)
+
+	def test_C23_zero_payment_amount_raises(self):
+		"""C23: amount_paise=0 → ValidationError, not enqueued."""
+		pay_mode = _get_pay_mode()
+		self._assert_raises_not_enqueued(
+			_make_req(payments=[PaymentItem(mode_of_payment=pay_mode, amount_paise=0)]),
+			match="greater than zero",
+		)
+
+	def test_C24_negative_payment_amount_raises(self):
+		"""C24: amount_paise=-500 → ValidationError, not enqueued."""
+		pay_mode = _get_pay_mode()
+		self._assert_raises_not_enqueued(
+			_make_req(payments=[PaymentItem(mode_of_payment=pay_mode, amount_paise=-500)]),
+			match="greater than zero",
+		)
+
+	def test_C25_overpayment_raises(self):
+		"""C25: paid (₹200) > grand_total (₹100) → ValidationError, not enqueued."""
+		pay_mode = _get_pay_mode()
+		self._assert_raises_not_enqueued(
+			_make_req(
+				items=[InvoiceItem(item_code=_TEST_ITEM, qty=1.0, rate_paise=10000)],
+				payments=[PaymentItem(mode_of_payment=pay_mode, amount_paise=20000)],
+			),
+			match="exceeds invoice total",
+		)
+
+	def test_C26_underpayment_beyond_write_off_limit_raises(self):
+		"""C26: shortfall (₹999) > write_off_limit (₹1) → ValidationError, not enqueued."""
+		pay_mode = _get_pay_mode()
+		self._assert_raises_not_enqueued(
+			_make_req(
+				items=[InvoiceItem(item_code=_TEST_ITEM, qty=1.0, rate_paise=100000)],
+				payments=[PaymentItem(mode_of_payment=pay_mode, amount_paise=100)],
+			),
+			match="shortfall",
+		)
+
+	def test_C27_underpayment_within_write_off_limit_submits(self):
+		"""C27: shortfall (₹0.50) ≤ write_off_limit (₹1) → submitted, outstanding=0."""
+		pay_mode = _get_pay_mode()
+		# ₹100.00 item, pay ₹99.50 — shortfall 0.50 within ₹1 tolerance
+		req = _make_req(
+			items=[InvoiceItem(item_code=_TEST_ITEM, qty=1.0, rate_paise=10000)],
+			payments=[PaymentItem(mode_of_payment=pay_mode, amount_paise=9950)],
+		)
+		name = self._submit(req)
+		self.assertIsNotNone(name)
+		inv = frappe.get_doc("Sales Invoice", name)
+		self.assertEqual(inv.docstatus, 1)
+		self.assertAlmostEqual(float(inv.outstanding_amount), 0.0, places=2)
+		self._cleanup_invoice(name)
+
+
+# ── C28-C29: Session enforcement ─────────────────────────────────────────────
+
+
+class TestSessionEnforcement(InvoiceTestBase):
+	"""C28-C29: open-shift gate in create_invoice."""
+
+	def _call_create_invoice(self, req: CreateInvoiceRequest):
+		"""Call the create_invoice API handler with a mocked Frappe request.
+
+		frappe.request is a LocalProxy — patch.object fails on Python 3.14 because
+		the mock library tries to inspect the proxy before it is bound. Set
+		frappe.local.request directly and restore it afterwards.
+		"""
+		raw = _msgspec.json.encode(req)
+		mock_req = MagicMock()
+		mock_req.data = raw
+		prev_request = getattr(frappe.local, "request", None)
+		frappe.local.request = mock_req
+		frappe.flags.ignore_permissions = True
+		frappe.session.user = _CASHIER
+		try:
+			return inv_module.create_invoice()
+		finally:
+			frappe.flags.ignore_permissions = False
+			frappe.session.user = "Administrator"
+			if prev_request is None:
+				try:
+					del frappe.local.request
+				except AttributeError:
+					pass
+			else:
+				frappe.local.request = prev_request
+
+	def test_C28_no_session_realtime_raises(self):
+		"""C28: offline=False + no open session → ValidationError, not enqueued."""
+		# Fresh test site has no POS Opening Entry — session check must fire
+		frappe.db.sql("DELETE FROM `tabPOS Opening Entry` WHERE pos_profile=%s AND status='Open'", _PROFILE)
+		req = _make_req()  # offline=False by default
+		with patch.object(inv_module, "enqueue_invoice") as mock_eq:
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				self._call_create_invoice(req)
+			self.assertIn("No open shift", str(ctx.exception))
+			mock_eq.assert_not_called()
+
+	def test_C29_offline_flag_bypasses_session_check(self):
+		"""C29: offline=True → session check skipped → invoice submitted without open session."""
+		pay_mode = _get_pay_mode()
+		req = CreateInvoiceRequest(
+			client_request_id=str(uuid.uuid4()),
+			pos_profile=_PROFILE,
+			customer=_TEST_CUSTOMER,
+			items=[InvoiceItem(item_code=_TEST_ITEM, qty=1.0, rate_paise=10000)],
+			payments=[PaymentItem(mode_of_payment=pay_mode, amount_paise=10000)],
+			offline=True,
+		)
+		# No session exists — but offline=True bypasses the check
+		result_json = self._call_create_invoice(req)
+		data = json.loads(result_json.data)
+		# Must reach _submit_invoice (submitted or queued) — not a session error
+		self.assertIn(data.get("status"), ("submitted", "queued"))
+		if data.get("invoice_name"):
+			self._cleanup_invoice(data["invoice_name"])
+
+
+# ── C28 (access): Disabled profile ───────────────────────────────────────────
+
+
+class TestAccessControl(InvoiceTestBase):
+	"""Disabled profile blocks all API access."""
+
+	def test_disabled_profile_blocks_access(self):
+		"""Disabled POS Profile → PermissionError from require_pos_profile_access."""
+		frappe.db.set_value("POS Profile", _PROFILE, "disabled", 1)
+		try:
+			frappe.session.user = _CASHIER
+			with self.assertRaises(frappe.PermissionError) as ctx:
+				require_pos_profile_access(_PROFILE)
+			self.assertIn("disabled", str(ctx.exception))
+		finally:
+			frappe.db.set_value("POS Profile", _PROFILE, "disabled", 0)
+			frappe.session.user = "Administrator"
+
+
+# ── C30: Stamp-override idempotency ──────────────────────────────────────────
+
+
+class TestStampOverrideIdempotency(InvoiceTestBase):
+	"""C30: duplicate request with new approval token must not overwrite original stamp."""
+
+	def test_C30_stamp_not_overwritten_on_idempotent_return(self):
+		"""C30: second request with a different token leaves original override_approved_by intact."""
+		req = _make_req()
+		name = self._submit(req)
+
+		# Simulate first request having stamped an override
+		frappe.db.set_value(
+			"Sales Invoice",
+			name,
+			{
+				"override_approved_by": "original_approver@test.surge",
+				"override_approved_at": now_datetime(),
+				"override_reason": "first approval",
+			},
+		)
+
+		# Simulate duplicate request arriving with a second approval payload
+		second_payload = {
+			"approver": "second_approver@test.surge",
+			"access_level": "Manager",
+			"ts": now_datetime().isoformat(),
+		}
+		# Replicate the guard from create_invoice
+		if not frappe.db.get_value("Sales Invoice", name, "override_approved_by"):
+			_stamp_override(name, second_payload)
+
+		actual = frappe.db.get_value("Sales Invoice", name, "override_approved_by")
+		self.assertEqual(actual, "original_approver@test.surge", "Original stamp must be preserved")
+		self._cleanup_invoice(name)

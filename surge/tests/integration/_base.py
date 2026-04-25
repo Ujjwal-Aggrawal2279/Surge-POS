@@ -92,6 +92,21 @@ def _ensure_company():
 		# after_insert creates the full Indian Chart of Accounts (Cash - _TSC, etc.)
 		frappe.db.commit()
 
+	# Wire up company defaults that ERPNext requires for GL entry creation.
+	# get_party_account() falls through to default_receivable_account when no
+	# per-customer Party Account row exists. make_precision_loss_gl_entry() requires
+	# round_off_cost_center for sub-paise rounding entries.
+	company_updates = {}
+	receivable_account = f"Debtors - {TEST_ABBR}"
+	if frappe.db.exists("Account", receivable_account) and not frappe.db.get_value(
+		"Company", TEST_COMPANY, "default_receivable_account"
+	):
+		company_updates["default_receivable_account"] = receivable_account
+	if not frappe.db.get_value("Company", TEST_COMPANY, "round_off_cost_center"):
+		company_updates["round_off_cost_center"] = TEST_COST_CENTER
+	if company_updates:
+		frappe.db.set_value("Company", TEST_COMPANY, company_updates)
+
 	if frappe.db.get_single_value("Global Defaults", "default_company") != TEST_COMPANY:
 		frappe.db.set_single_value("Global Defaults", "default_company", TEST_COMPANY)
 

@@ -3,12 +3,15 @@ import { ShieldCheck, X, Loader2, Bell, Check, XCircle } from "lucide-react";
 import { get, post, hashPin } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+interface DiscountItem { item_name: string; pct: number }
+
 interface PendingRequest {
   req_id: string;
   cashier_name: string;
   pos_profile: string;
   action: string;
   created_at: string;
+  meta?: string;
 }
 
 interface Props {
@@ -168,10 +171,27 @@ export function ApprovalQueue({ accessLevel }: Props) {
                   ← Back
                 </button>
                 <p className="mb-1 text-xs font-semibold text-[#212B36]">Request from {active.cashier_name}</p>
-                <p className="mb-4 text-xs text-[#919EAB]">
+                <p className="mb-2 text-xs text-[#919EAB]">
                   Action: <span className="font-medium text-[#6938EF]">{active.action.replace(/_/g, " ")}</span>
                   {" · "}{active.pos_profile}
                 </p>
+                {(() => {
+                  let items: DiscountItem[] = [];
+                  try { items = active.meta ? JSON.parse(active.meta) : []; } catch { /* ignore */ }
+                  return items.length > 0 ? (
+                    <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2">
+                      <p className="mb-1 text-[10px] font-semibold text-amber-700">Items & discounts</p>
+                      <ul className="space-y-0.5">
+                        {items.map((d) => (
+                          <li key={d.item_name} className="flex items-center justify-between text-[11px] text-amber-800">
+                            <span className="truncate max-w-40">{d.item_name}</span>
+                            <span className="ml-2 font-bold shrink-0">{d.pct.toFixed(1)}%</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null;
+                })()}
                 <label className="mb-1.5 block text-xs font-semibold text-[#212B36]">
                   Your PIN ({accessLevel})
                 </label>

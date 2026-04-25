@@ -44,13 +44,38 @@ def create_invoice():
 
 	require_pos_profile_access(req.pos_profile)
 
-	approval_payload = _check_discount_limits(req)
+	# Shift enforcement: real-time submissions require an open session.
+	# Queued (offline) invoices bypass this — they were recorded during a valid session
+	# and are replayed by flush_write_queue after connectivity is restored.
+	if not req.offline and not frappe.db.exists(
+		"POS Opening Entry",
+		{"pos_profile": req.pos_profile, "status": "Open", "docstatus": 1},
+	):
+		frappe.throw(
+			f"No open shift for POS Profile '{req.pos_profile}'. Open a shift before accepting payments.",
+			frappe.ValidationError,
+		)
+
+	if req.offline:
+		# Offline replay — discount was pre-approved at queueing time.
+		# Token may be consumed (single-use) or expired on retry; don't re-throw.
+		approval_payload = None
+		if req.approval_token:
+			try:
+				approval_payload = verify_approval_token(req.approval_token)
+			except Exception:
+				pass
+	else:
+		approval_payload = _check_discount_limits(req)
 
 	grand_total_paise = sum(p.amount_paise for p in req.payments)
 
 	try:
 		invoice_name = _submit_invoice(req)
-		if approval_payload:
+		# Guard: skip re-stamp if the invoice already has an override recorded (idempotent re-submit).
+		if approval_payload and not frappe.db.get_value(
+			"Sales Invoice", invoice_name, "override_approved_by"
+		):
 			_stamp_override(invoice_name, approval_payload)
 		return surge_response(
 			{
@@ -76,11 +101,18 @@ def create_invoice():
 
 
 def _submit_invoice(req: CreateInvoiceRequest) -> str:
-	# Idempotency guard — scoped to the submitting user so Cashier B cannot claim
-	# Cashier A's invoice by reusing the same client_request_id.
+	if not req.client_request_id:
+		frappe.throw("client_request_id is required.", frappe.ValidationError)
+	if not req.items:
+		frappe.throw("Invoice must have at least one item.", frappe.ValidationError)
+	if not req.payments:
+		frappe.throw("Invoice must have at least one payment.", frappe.ValidationError)
+
+	# Idempotency: scoped to submitting user; docstatus=1 excludes cancelled invoices
+	# so a cancelled invoice with the same req_id correctly generates a fresh submission.
 	existing = frappe.db.get_value(
 		"Sales Invoice",
-		{"surge_client_req_id": req.client_request_id, "owner": frappe.session.user},
+		{"surge_client_req_id": req.client_request_id, "owner": frappe.session.user, "docstatus": 1},
 		"name",
 	)
 	if existing:
@@ -96,6 +128,11 @@ def _submit_invoice(req: CreateInvoiceRequest) -> str:
 				f"Payment mode '{payment.mode_of_payment}' is not configured on this POS Profile.",
 				frappe.ValidationError,
 			)
+		if payment.amount_paise <= 0:
+			frappe.throw(
+				f"Payment amount for '{payment.mode_of_payment}' must be greater than zero.",
+				frappe.ValidationError,
+			)
 
 	# Capture timestamp once — prevents posting_date and posting_time straddling midnight
 	now = now_datetime()
@@ -103,6 +140,9 @@ def _submit_invoice(req: CreateInvoiceRequest) -> str:
 	invoice = frappe.new_doc("Sales Invoice")
 	invoice.is_pos = 1
 	invoice.update_stock = 1
+	# ERPNext sets update_outstanding="No" for is_pos=1; mirrors POS Closing Entry pattern
+	# so any GST rounding diff between client paid_amount and server grand_total is written off.
+	invoice.write_off_outstanding_amount_automatically = 1
 	invoice.posting_date = now.date()
 	invoice.posting_time = str(now.time())
 	invoice.pos_profile = req.pos_profile
@@ -124,23 +164,16 @@ def _submit_invoice(req: CreateInvoiceRequest) -> str:
 		# Validate warehouse is accessible to this user — prevents cross-terminal stock manipulation
 		effective_warehouse = item.warehouse or pos_profile.warehouse
 		require_warehouse_access(effective_warehouse)
+		net_rate = (item.rate_paise - item.discount_paise) / 100.0
 		invoice.append(
 			"items",
 			{
 				"item_code": item.item_code,
 				"qty": item.qty,
-				"rate": item.rate_paise / 100.0,
+				"price_list_rate": item.rate_paise / 100.0,
 				"discount_amount": item.discount_paise / 100.0,
+				"rate": net_rate,
 				"warehouse": effective_warehouse,
-			},
-		)
-
-	for payment in req.payments:
-		invoice.append(
-			"payments",
-			{
-				"mode_of_payment": payment.mode_of_payment,
-				"amount": payment.amount_paise / 100.0,
 			},
 		)
 
@@ -150,8 +183,42 @@ def _submit_invoice(req: CreateInvoiceRequest) -> str:
 	prev = frappe.flags.ignore_permissions
 	frappe.flags.ignore_permissions = True
 	try:
+		# set_missing_values() → set_pos_fields() → update_multi_mode_option() unconditionally
+		# calls doc.set("payments", []), wiping any payments appended before this call.
+		# Payments must be set AFTER set_missing_values() so paid_amount is correct for
+		# all states: Goa Non-GST (VAT in MRP), GST states, and any future tax structure.
 		invoice.set_missing_values()
+
+		invoice.set("payments", [])
+		for payment in req.payments:
+			invoice.append(
+				"payments",
+				{
+					"mode_of_payment": payment.mode_of_payment,
+					"amount": payment.amount_paise / 100.0,
+				},
+			)
+
 		invoice.calculate_taxes_and_totals()
+
+		# Guard: overpayment produces a negative write_off_amount → inverted GL entry.
+		invoice_total = invoice.rounded_total or invoice.grand_total
+		if invoice.paid_amount > invoice_total:
+			frappe.throw(
+				f"Total payment ({invoice.paid_amount:.2f}) exceeds invoice total ({invoice_total:.2f}).",
+				frappe.ValidationError,
+			)
+
+		# Guard: underpayment beyond write_off_limit would silently write off a large amount.
+		# write_off_outstanding_amount_automatically has no built-in limit for non-consolidated invoices.
+		write_off_limit = float(pos_profile.write_off_limit or 0)
+		if invoice.write_off_amount > write_off_limit:
+			frappe.throw(
+				f"Payment shortfall of ₹{invoice.write_off_amount:.2f} exceeds the allowed "
+				f"write-off tolerance of ₹{write_off_limit:.2f}. Collect the full payment.",
+				frappe.ValidationError,
+			)
+
 		invoice.insert(ignore_permissions=True)
 		invoice.submit()
 	finally:

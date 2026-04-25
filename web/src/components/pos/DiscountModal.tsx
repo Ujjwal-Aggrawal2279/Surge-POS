@@ -143,6 +143,9 @@ export function DiscountModal({ items, cashier, discountLimitPct, posProfile, on
         <ManagerApprovalModal
           posProfile={posProfile}
           action="discount_override"
+          discountItems={items
+            .map((i) => ({ item_name: i.item_name, pct: parseFloat(inputs[i.item_code] || "0") || 0 }))
+            .filter((i) => i.pct > 0)}
           onApproved={(token, approver) => {
             setApprovalToken(token);
             setApprovedBy(approver.full_name);

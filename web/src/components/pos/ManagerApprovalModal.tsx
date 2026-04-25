@@ -6,9 +6,12 @@ import { cn } from "@/lib/utils";
 import type { Cashier } from "@/types/pos";
 
 interface CashiersResponse { cashiers: Cashier[] }
+interface DiscountItem { item_name: string; pct: number }
+
 interface Props {
   posProfile: string;
   action: string;
+  discountItems?: DiscountItem[];
   onApproved: (token: string, approver: Cashier) => void;
   onClose: () => void;
 }
@@ -17,7 +20,7 @@ type Stage = "select" | "waiting" | "unanswered" | "denied" | "expired" | "unava
 const TIMEOUT_SEC = 180; // 3-min display timer; request lives 30 min in Redis
 const SS_KEY = "surge:pending_approval"; // sessionStorage key for page-refresh resilience
 
-export function ManagerApprovalModal({ posProfile, action, onApproved, onClose }: Props) {
+export function ManagerApprovalModal({ posProfile, action, discountItems, onApproved, onClose }: Props) {
   // Restore pending request from sessionStorage (survives page refresh)
   const [stage, setStage]             = useState<Stage>(() => {
     try {
@@ -117,9 +120,12 @@ export function ManagerApprovalModal({ posProfile, action, onApproved, onClose }
     setSending(true);
     setError("");
     try {
+      const meta = discountItems?.length
+        ? JSON.stringify(discountItems.map((d) => ({ item_name: d.item_name, pct: d.pct })))
+        : "";
       const res = await post<{ status: string; req_id?: string; message?: string }>(
         "surge.api.auth.request_approval_remote",
-        { pos_profile: posProfile, approver: selected.user, action },
+        { pos_profile: posProfile, approver: selected.user, action, meta },
       );
       if (res.status === "pending" && res.req_id) {
         try {
@@ -168,6 +174,19 @@ export function ManagerApprovalModal({ posProfile, action, onApproved, onClose }
 
         {stage === "select" && (
           <>
+            {discountItems && discountItems.length > 0 && (
+              <div className="mb-4 rounded-lg bg-amber-50 px-3 py-2.5">
+                <p className="mb-1.5 text-xs font-semibold text-amber-700">Discounts requiring approval</p>
+                <ul className="space-y-0.5">
+                  {discountItems.map((d) => (
+                    <li key={d.item_name} className="flex items-center justify-between text-xs text-amber-800">
+                      <span className="truncate max-w-50">{d.item_name}</span>
+                      <span className="ml-2 font-bold shrink-0">{d.pct.toFixed(1)}%</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <p className="mb-4 text-sm text-[#646B72]">
               Select an approver. They will receive a request on their screen.
             </p>

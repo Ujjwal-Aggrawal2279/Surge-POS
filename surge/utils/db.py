@@ -23,6 +23,7 @@ def items_query(since: str = "", limit: int = 500) -> list[dict]:
             i.name          AS item_code,
             i.item_name,
             i.item_group,
+            i.brand,
             i.stock_uom,
             i.has_variants,
             i.image,

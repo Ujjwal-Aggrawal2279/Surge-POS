@@ -31,6 +31,9 @@ def require_pos_profile_access(profile: str) -> None:
 	if frappe.session.user in ("Administrator",):
 		return
 
+	if frappe.db.get_value("POS Profile", profile, "disabled"):
+		frappe.throw(f"POS Profile '{profile}' is disabled.", frappe.PermissionError)
+
 	# First: does this profile restrict access to specific users at all?
 	has_any_users = frappe.db.count("POS Profile User", {"parent": profile})
 	if not has_any_users:

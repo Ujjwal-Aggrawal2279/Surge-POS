@@ -2,6 +2,7 @@ export interface Item {
   item_code: string;
   item_name: string;
   item_group: string;
+  brand: string | null;
   stock_uom: string;
   has_variants: 0 | 1;
   image: string | null;

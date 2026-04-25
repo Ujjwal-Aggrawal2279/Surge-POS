@@ -77,6 +77,7 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
         (i) =>
           i.item_name.toLowerCase().includes(q) ||
           i.item_code.toLowerCase().includes(q) ||
+          (i.brand?.toLowerCase().includes(q) ?? false) ||
           i.barcodes.some((b) => b.toLowerCase().includes(q)),
       );
     return list;
@@ -289,10 +290,10 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
                   <p className="truncate text-sm font-bold leading-5.25 text-[#212B36]">
                     {item.item_name}
                   </p>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-bold text-[#0E9384]">{formatCurrency(rate)}</span>
-                    <span className="text-sm text-[#DD2590]">
-                      {outOfStock ? "Out" : `${qty} Pcs`}
+                    <span className={cn("shrink-0 text-xs font-medium", outOfStock ? "text-[#DD2590]" : "text-[#3EB780]")}>
+                      {outOfStock ? "Out" : "In stock"}
                     </span>
                   </div>
                 </div>
@@ -362,9 +363,13 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
                 </span>
 
                 {/* Stock */}
-                <span className={cn("shrink-0 w-14 text-right text-xs font-medium",
-                  outOfStock ? "text-[#DD2590]" : "text-[#646B72]")}>
-                  {outOfStock ? "Out of stock" : `${qty} pcs`}
+                <span className={cn(
+                  "shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-semibold",
+                  outOfStock
+                    ? "bg-[#FFF1F3] text-[#DD2590]"
+                    : "bg-[#ECFDF3] text-[#3EB780]",
+                )}>
+                  {outOfStock ? "Out of stock" : "In stock"}
                 </span>
 
                 {/* Add / Remove */}
