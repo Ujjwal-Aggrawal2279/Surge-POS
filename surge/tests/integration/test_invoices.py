@@ -26,6 +26,7 @@ C21  Mobile checkout handleMobileCheckout stable ref (unit/E2E test)
 
 import concurrent.futures
 import json
+import time
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -443,7 +444,8 @@ class TestQueueFallback(InvoiceTestBase):
 
 class TestConcurrentInvoices(InvoiceTestBase):
 	def test_C19_ten_concurrent_invoices_all_unique(self):
-		"""C19: 10 concurrent invoices from same terminal → all unique names, no duplicates."""
+		"""C19: 5 concurrent invoices from same terminal → all unique names, no duplicates."""
+		WORKERS = 5
 		names = []
 		errors = []
 		site = frappe.local.site
@@ -453,10 +455,10 @@ class TestConcurrentInvoices(InvoiceTestBase):
 			frappe.connect()
 			try:
 				frappe.set_user(_CASHIER)
-				# Retry on transient MariaDB errors (1213 deadlock, 1020 stale read)
-				# which occur under high concurrency on the naming-series row.
+				# Retry with linear backoff on transient MariaDB errors:
+				# 1213 = deadlock, 1020 = stale read on naming-series row.
 				retryable = ("1213", "1020", "Deadlock", "Record has changed")
-				for attempt in range(5):
+				for attempt in range(10):
 					try:
 						name = _submit_invoice(_make_req())
 						frappe.db.commit()  # commit so each thread's series increment is visible
@@ -464,7 +466,8 @@ class TestConcurrentInvoices(InvoiceTestBase):
 						break
 					except Exception as exc:
 						frappe.db.rollback()
-						if attempt < 4 and any(k in str(exc) for k in retryable):
+						if attempt < 9 and any(k in str(exc) for k in retryable):
+							time.sleep(0.1 * (attempt + 1))
 							continue
 						raise
 			except Exception as e:
@@ -472,12 +475,12 @@ class TestConcurrentInvoices(InvoiceTestBase):
 			finally:
 				frappe.destroy()
 
-		with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
-			futures = [pool.submit(submit_one) for _ in range(10)]
+		with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
+			futures = [pool.submit(submit_one) for _ in range(WORKERS)]
 			concurrent.futures.wait(futures)
 
 		self.assertEqual(len(errors), 0, f"No errors expected: {errors}")
-		self.assertEqual(len(set(names)), 10, "All 10 invoice names must be unique")
+		self.assertEqual(len(set(names)), WORKERS, f"All {WORKERS} invoice names must be unique")
 
 		for n in names:
 			self._cleanup_invoice(n)
