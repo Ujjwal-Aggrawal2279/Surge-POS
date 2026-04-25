@@ -269,7 +269,7 @@ def forgot_pin(user: str, pos_profile: str) -> object:
 	frappe.db.commit()
 	_log_action("forgot_pin", user=user, profile=pos_profile)
 
-	return surge_response({"status": "ok"})
+	return surge_response({"status": "ok", "message": "If found, managers have been notified."})
 
 
 @frappe.whitelist(allow_guest=False)

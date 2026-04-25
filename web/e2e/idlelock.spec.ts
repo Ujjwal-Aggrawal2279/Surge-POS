@@ -36,6 +36,8 @@ async function interceptWithSession(page: import("@playwright/test").Page) {
       return respond({ status: "ok", user: "cashier@test.com", access_level: "Cashier", full_name: "Test Cashier" });
     if (url.includes("get_items"))
       return respond({ items: [], has_more: false });
+    if (url.includes("get_cashiers"))
+      return respond({ cashiers: [{ user: "cashier@test.com", full_name: "Test Cashier", access_level: "Cashier", has_pin: true, locked: false }] });
 
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ message: null }) });
   });
@@ -56,7 +58,7 @@ test("D01: idle warning appears after 14m45s inactivity", async ({ page }) => {
   await page.clock.fastForward(WARN_MS + EXTRA_MS);
 
   const warning = page
-    .locator("text=You've been idle")
+    .locator("text=Terminal will lock in")
     .or(page.locator("[data-testid='idle-warning']"))
     .or(page.locator("[role='alertdialog']"));
 
@@ -69,10 +71,7 @@ test("D02: dismissing idle warning resets the timer", async ({ page }) => {
   await loginAndNavigateToSell(page);
   await page.clock.fastForward(WARN_MS + EXTRA_MS);
 
-  const dismissBtn = page
-    .locator("button:has-text('Stay')")
-    .or(page.locator("button:has-text('I'm here')"))
-    .or(page.locator("[data-testid='idle-dismiss']"));
+  const dismissBtn = page.getByRole("button").filter({ hasText: /I'm here|Stay/ });
 
   await expect(dismissBtn).toBeVisible({ timeout: 5_000 });
   await dismissBtn.click();
@@ -87,13 +86,17 @@ test("D02: dismissing idle warning resets the timer", async ({ page }) => {
 
 test("D03: screen locks after full 15m inactivity", async ({ page }) => {
   await loginAndNavigateToSell(page);
-  await page.clock.fastForward(LOCK_MS + EXTRA_MS);
+
+  // Two-step advance: first trigger the warning so React sets up the lock timer,
+  // then advance the remaining 15s so the lock timer fires.
+  await page.clock.fastForward(WARN_MS + EXTRA_MS);
+  await expect(page.locator("text=Terminal will lock in")).toBeVisible({ timeout: 5_000 });
+  await page.clock.fastForward(LOCK_MS - WARN_MS + EXTRA_MS);
 
   const lockScreen = page
-    .locator("[data-testid='lock-screen']")
-    .or(page.locator("text=Session locked"))
-    .or(page.locator("input[data-testid='pin-input']"));
-
+    .locator("text=PIN Verification")
+    .or(page.locator("text=Who's at the register?"))
+    .or(page.locator("[data-testid='lock-screen']"));
   await expect(lockScreen).toBeVisible({ timeout: 5_000 });
 });
 
@@ -130,9 +133,7 @@ test("D05: idle timer does not lock while LogoutConfirm is open", async ({ page 
     .or(page.locator("[data-testid='logout-btn']"));
   if (await logoutBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
     await logoutBtn.click();
-    await expect(page.locator("[data-testid='logout-confirm'], [role='dialog']")).toBeVisible({
-      timeout: 3_000,
-    });
+    await expect(page.locator("text=Log out?")).toBeVisible({ timeout: 3_000 });
   }
 
   await page.clock.fastForward(LOCK_MS + EXTRA_MS);

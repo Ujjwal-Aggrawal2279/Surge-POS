@@ -67,11 +67,15 @@ def _setup():
 		item.item_group = TEST_ITEM_GROUP
 		item.stock_uom = "Nos"
 		item.gst_hsn_code = TEST_HSN
-		item.is_stock_item = 1
+		item.is_stock_item = 0
 		item.insert(ignore_permissions=True)
+	elif frappe.db.get_value("Item", _TEST_ITEM, "is_stock_item"):
+		frappe.db.set_value("Item", _TEST_ITEM, "is_stock_item", 0)
 
 	if not frappe.db.exists("POS Profile", _PROFILE):
-		modes = frappe.get_all("Mode of Payment", limit=1, pluck="name")
+		modes = frappe.db.get_all(
+			"Mode of Payment Account", filters={"company": TEST_COMPANY}, pluck="parent", limit=1
+		) or ["Cash"]
 		p = frappe.new_doc("POS Profile")
 		p.name = _PROFILE
 		p.company = TEST_COMPANY

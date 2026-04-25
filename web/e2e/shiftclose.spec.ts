@@ -119,9 +119,7 @@ test("E03: PaymentDialog is absent from DOM while ShiftClose dialog is active", 
 
   if (await closeBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await closeBtn.click();
-    await expect(
-      page.locator("[data-testid='shift-close-dialog'], [role='dialog']"),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("text=Count your cash first")).toBeVisible({ timeout: 5_000 });
 
     // PaymentDialog must NOT be in the DOM simultaneously
     const paymentDialog = page
@@ -138,13 +136,20 @@ test("E04: ShiftClose with empty payment_modes shows error, not blank form", asy
   await interceptAPI(page, { "get_pos_profile": mockPOSProfile([]) });
   await goToSellScreen(page, { accessLevel: "Manager", paymentModes: [] });
 
-  // The shift close form should show an error or warning, not render empty inputs
+  // Open ShiftClose — only renders when shiftCloseOpen = true
+  const closeShiftBtn = page
+    .locator("button:has-text('Close Shift')")
+    .or(page.locator("[data-testid='close-shift-btn']"));
+  await expect(closeShiftBtn).toBeVisible({ timeout: 10_000 });
+  await closeShiftBtn.click();
+
+  // ShiftClose with empty payment_modes shows error guard, not blank form
   const errorMsg = page
     .locator("text=No payment modes")
     .or(page.locator(".text-destructive"))
     .or(page.locator("[data-testid='payment-modes-error']"));
 
-  await expect(errorMsg).toBeVisible({ timeout: 10_000 });
+  await expect(errorMsg).toBeVisible({ timeout: 5_000 });
 
   // Numeric closing-balance inputs must be absent
   const inputs = page.locator("input[type='number']");

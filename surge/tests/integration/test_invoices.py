@@ -87,9 +87,14 @@ def _ensure_user(email, role="POS User"):
 
 def _setup_fixtures():
 	ensure_master_data()
-	avail_modes = frappe.get_all("Mode of Payment", pluck="name")
+	# Only use modes that have an account for TEST_COMPANY (avoids Cheque on production sites)
+	avail_modes = frappe.db.get_all(
+		"Mode of Payment Account",
+		filters={"company": TEST_COMPANY},
+		pluck="parent",
+	) or ["Cash"]
 
-	# Test item
+	# Test item — non-stock so tests don't need stock entries in any environment
 	if not frappe.db.exists("Item", _TEST_ITEM):
 		item = frappe.new_doc("Item")
 		item.item_code = _TEST_ITEM
@@ -97,8 +102,10 @@ def _setup_fixtures():
 		item.item_group = TEST_ITEM_GROUP
 		item.stock_uom = "Nos"
 		item.gst_hsn_code = TEST_HSN
-		item.is_stock_item = 1
+		item.is_stock_item = 0
 		item.insert(ignore_permissions=True)
+	elif frappe.db.get_value("Item", _TEST_ITEM, "is_stock_item"):
+		frappe.db.set_value("Item", _TEST_ITEM, "is_stock_item", 0)
 
 	# Test customer
 	if not frappe.db.exists("Customer", _TEST_CUSTOMER):
@@ -162,13 +169,43 @@ def _get_pay_mode():
 	return modes[0] if modes else "Cash"
 
 
+def _force_delete_invoice(name: str):
+	"""Hard-delete a Sales Invoice and all linked accounting rows via raw SQL."""
+	# Remove child GL/ledger rows first so the parent delete has no FK blockers
+	for table in ("tabGL Entry", "tabPayment Ledger Entry"):
+		frappe.db.sql(f"DELETE FROM `{table}` WHERE voucher_no = %s", name)  # noqa: S608
+	for table in ("tabSales Invoice Item", "tabSales Invoice Payment", "tabSales Taxes and Charges"):
+		frappe.db.sql(f"DELETE FROM `{table}` WHERE parent = %s", name)  # noqa: S608
+	frappe.db.sql("DELETE FROM `tabSales Invoice` WHERE name = %s", name)  # noqa: S608
+
+
+def _cleanup_test_invoices():
+	"""Remove test invoices — including committed C19 invoices — before and after each class."""
+	invoices = frappe.db.get_all(
+		"Sales Invoice",
+		filters={"pos_profile": _PROFILE},
+		pluck="name",
+	)
+	for name in invoices:
+		_force_delete_invoice(name)
+	if invoices:
+		frappe.db.commit()
+
+
 class InvoiceTestBase(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
 		for u in [_CASHIER, _MANAGER, _OTHER_CASHIER]:
 			_ensure_user(u)
+			_ensure_user(u, role="Sales User")  # Customer read permission for _submit_invoice
 		_setup_fixtures()
+		_cleanup_test_invoices()
+
+	@classmethod
+	def tearDownClass(cls):
+		_cleanup_test_invoices()
+		super().tearDownClass()
 
 	def _submit(self, req):
 		frappe.flags.ignore_permissions = True
@@ -182,15 +219,9 @@ class InvoiceTestBase(FrappeTestCase):
 
 	def _cleanup_invoice(self, name):
 		if name and frappe.db.exists("Sales Invoice", name):
-			inv = frappe.get_doc("Sales Invoice", name)
-			try:
-				if inv.docstatus == 1:
-					inv.flags.ignore_permissions = True
-					inv.cancel()
-			except Exception:
-				pass
-			frappe.delete_doc("Sales Invoice", name, ignore_permissions=True, force=True)
+			_force_delete_invoice(name)
 			frappe.db.commit()
+
 
 
 # ── C01-C05: Basic submission and idempotency ─────────────────────────────────
@@ -416,18 +447,21 @@ class TestConcurrentInvoices(InvoiceTestBase):
 		"""C19: 10 concurrent invoices from same terminal → all unique names, no duplicates."""
 		names = []
 		errors = []
+		site = frappe.local.site
 
 		def submit_one():
+			frappe.init(site=site)
+			frappe.connect()
 			try:
-				frappe.flags.ignore_permissions = True
-				frappe.session.user = _CASHIER
+				frappe.set_user(_CASHIER)
 				name = _submit_invoice(_make_req())
+				frappe.db.commit()  # must commit so each thread's series increment is visible
 				names.append(name)
 			except Exception as e:
+				frappe.db.rollback()
 				errors.append(str(e))
 			finally:
-				frappe.flags.ignore_permissions = False
-				frappe.session.user = "Administrator"
+				frappe.destroy()
 
 		with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
 			futures = [pool.submit(submit_one) for _ in range(10)]

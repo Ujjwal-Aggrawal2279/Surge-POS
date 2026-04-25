@@ -115,7 +115,14 @@ class AuthTestBase(FrappeTestCase):
 
 		# Create test profile if needed
 		if not frappe.db.exists("POS Profile", _TEST_PROFILE):
-			modes = frappe.get_all("Mode of Payment", limit=1, pluck="name")
+			# Only use modes that have an account configured for TEST_COMPANY
+			# (avoids "Cheque" which requires a bank account on production sites)
+			modes = frappe.db.get_all(
+				"Mode of Payment Account",
+				filters={"company": TEST_COMPANY},
+				pluck="parent",
+				limit=1,
+			) or ["Cash"]
 			p = frappe.new_doc("POS Profile")
 			p.name = _TEST_PROFILE
 			p.company = TEST_COMPANY
@@ -186,10 +193,16 @@ class TestPINLogin(AuthTestBase):
 		"""A04: 3 concurrent wrong PINs → atomic INCR, user locked after exactly 3."""
 		wrong = _hash_pin("9999")
 		results = []
+		site = frappe.local.site
 
 		def try_wrong():
-			r = json.loads(verify_pin(_TEST_PROFILE, _CASHIER, wrong).data)
-			results.append(r["status"])
+			frappe.init(site=site)
+			frappe.connect()
+			try:
+				r = json.loads(verify_pin(_TEST_PROFILE, _CASHIER, wrong).data)
+				results.append(r["status"])
+			finally:
+				frappe.destroy()
 
 		threads = [threading.Thread(target=try_wrong) for _ in range(PIN_MAX_ATTEMPTS)]
 		for t in threads:
@@ -221,27 +234,25 @@ class TestPINLogin(AuthTestBase):
 			self._verify(pin=wrong)
 		self.assertTrue(_is_locked(_CASHIER, _TEST_PROFILE))
 
-		result = json.loads(override_lockout(_CASHIER, _TEST_PIN_HASH, _TEST_PROFILE).data)
-		# Note: override_lockout is called as the supervisor
-		# The function internally calls verify_pin for the supervisor
+		frappe.set_user(_SUPERVISOR)
+		try:
+			result = json.loads(override_lockout(_CASHIER, _TEST_PIN_HASH, _TEST_PROFILE).data)
+		finally:
+			frappe.set_user("Administrator")
 		self.assertEqual(result["status"], "ok")
 		self.assertFalse(_is_locked(_CASHIER, _TEST_PROFILE), "Cashier should be unlocked after override")
 
 	# A07
 	def test_A07_cashier_cannot_unlock(self):
 		"""A07: Cashier-level user tries override → forbidden."""
-		wrong = _hash_pin("9999")
-		for _ in range(PIN_MAX_ATTEMPTS):
-			self._verify(pin=wrong)
-
-		# Another cashier (not supervisor) tries to override
-		# override_lockout first verifies the supervisor's PIN, then checks access_level
-		# Since _CASHIER has access_level=Cashier, this should fail
-		result = json.loads(override_lockout(_CASHIER, _TEST_PIN_HASH, _TEST_PROFILE).data)
-		# The supervisor in this call IS the cashier — access_level Cashier
-		# frappe.session.user is Administrator here, but the supervisor param is checked
-		self.assertIn(result["status"], ("forbidden", "ok"))
-		# If the session user IS a cashier-level, they get forbidden
+		# frappe.session.user = _CASHIER (Cashier access level)
+		# override_lockout verifies _CASHIER's PIN → ok, then checks access_level → Cashier → forbidden
+		frappe.set_user(_CASHIER)
+		try:
+			result = json.loads(override_lockout(_SUPERVISOR, _TEST_PIN_HASH, _TEST_PROFILE).data)
+		finally:
+			frappe.set_user("Administrator")
+		self.assertEqual(result["status"], "forbidden")
 
 	# A08
 	def test_A08_forgot_pin_returns_generic_response(self):

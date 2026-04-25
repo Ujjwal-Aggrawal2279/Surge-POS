@@ -337,8 +337,11 @@ class TestShiftClose(FrappeTestCase):
 		opened = _open()
 		entry_name = opened["session_name"]
 		results, errors = [], []
+		site = frappe.local.site
 
 		def try_close():
+			frappe.init(site=site)
+			frappe.connect()
 			try:
 				frappe.set_user(_MANAGER)
 				r = json.loads(close_session(entry_name, [{"mode_of_payment": "Cash", "amount": 0}]).data)
@@ -346,7 +349,7 @@ class TestShiftClose(FrappeTestCase):
 			except Exception as e:
 				errors.append(str(e))
 			finally:
-				frappe.set_user("Administrator")
+				frappe.destroy()
 
 		t1, t2 = threading.Thread(target=try_close), threading.Thread(target=try_close)
 		t1.start()
