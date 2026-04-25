@@ -163,7 +163,7 @@ def override_lockout(
 
 	supervisor = frappe.session.user
 
-	result = frappe.parse_json(verify_pin(pos_profile=pos_profile, user=supervisor, pin=supervisor_pin).data)
+	result = json.loads(verify_pin(pos_profile=pos_profile, user=supervisor, pin=supervisor_pin).data)
 	if result.get("status") != "ok":
 		return surge_response(result)
 
@@ -269,7 +269,7 @@ def forgot_pin(user: str, pos_profile: str) -> object:
 	frappe.db.commit()
 	_log_action("forgot_pin", user=user, profile=pos_profile)
 
-	return surge_response({"status": "ok"})
+	return surge_response({"status": "ok", "message": "If found, managers have been notified."})
 
 
 @frappe.whitelist(allow_guest=False)

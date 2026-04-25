@@ -18,6 +18,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from surge.tests.integration._base import (
+	TEST_ABBR,
 	TEST_COMPANY,
 	TEST_COST_CENTER,
 	TEST_PRICE_LIST,
@@ -73,7 +74,10 @@ def _make_profile(name, users=None, warehouse=None):
 	p.company = TEST_COMPANY
 	p.warehouse = warehouse or TEST_WAREHOUSE
 	p.selling_price_list = TEST_PRICE_LIST
-	for m in frappe.get_all("Mode of Payment", limit=1, pluck="name"):
+	avail_modes = frappe.db.get_all(
+		"Mode of Payment Account", filters={"company": TEST_COMPANY}, pluck="parent", limit=1
+	) or ["Cash"]
+	for m in avail_modes:
 		p.append("payments", {"mode_of_payment": m, "default": 1})
 	for u in users or []:
 		p.append(
@@ -194,9 +198,19 @@ class TestProfileAccess(PermissionsTestBase):
 class TestWarehouseAccess(PermissionsTestBase):
 	def test_G07_cross_terminal_warehouse_denied(self):
 		"""G07: Warehouse linked only to a profile the user cannot access → PermissionError."""
+		# Use a warehouse exclusive to this test — not shared with _OPEN_PROFILE.
+		# Frappe appends " - <abbr>" to warehouse_name, so the actual doc name is g07_wh_full.
+		g07_wh_name = "_G07ExclusiveWarehouse"
+		g07_wh_full = f"{g07_wh_name} - {TEST_ABBR}"
+		if not frappe.db.exists("Warehouse", g07_wh_full):
+			wh = frappe.new_doc("Warehouse")
+			wh.warehouse_name = g07_wh_name
+			wh.company = TEST_COMPANY
+			wh.insert(ignore_permissions=True)
+			frappe.db.commit()
 		_make_profile(
 			"_GPermWHProfile",
-			warehouse=TEST_WAREHOUSE,
+			warehouse=g07_wh_full,
 			users=[
 				{"user": _ACTIVE_USER, "status": "Active"},
 			],
@@ -204,7 +218,7 @@ class TestWarehouseAccess(PermissionsTestBase):
 		frappe.set_user(_UNLISTED_USER)
 		try:
 			with self.assertRaises(frappe.PermissionError):
-				require_warehouse_access(TEST_WAREHOUSE)
+				require_warehouse_access(g07_wh_full)
 		finally:
 			frappe.set_user("Administrator")
 			frappe.delete_doc("POS Profile", "_GPermWHProfile", ignore_permissions=True, force=True)

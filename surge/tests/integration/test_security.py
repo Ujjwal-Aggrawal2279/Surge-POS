@@ -50,6 +50,10 @@ def _ensure_user(email):
 		u.first_name = email.split("@")[0]
 		u.send_welcome_email = 0
 		u.insert(ignore_permissions=True)
+	if not frappe.db.exists("Has Role", {"parent": email, "role": "POS User"}):
+		doc = frappe.get_doc("User", email)
+		doc.append("roles", {"role": "POS User"})
+		doc.save(ignore_permissions=True)
 		frappe.db.commit()
 
 
@@ -63,11 +67,15 @@ def _setup():
 		item.item_group = TEST_ITEM_GROUP
 		item.stock_uom = "Nos"
 		item.gst_hsn_code = TEST_HSN
-		item.is_stock_item = 1
+		item.is_stock_item = 0
 		item.insert(ignore_permissions=True)
+	elif frappe.db.get_value("Item", _TEST_ITEM, "is_stock_item"):
+		frappe.db.set_value("Item", _TEST_ITEM, "is_stock_item", 0)
 
 	if not frappe.db.exists("POS Profile", _PROFILE):
-		modes = frappe.get_all("Mode of Payment", limit=1, pluck="name")
+		modes = frappe.db.get_all(
+			"Mode of Payment Account", filters={"company": TEST_COMPANY}, pluck="parent", limit=1
+		) or ["Cash"]
 		p = frappe.new_doc("POS Profile")
 		p.name = _PROFILE
 		p.company = TEST_COMPANY

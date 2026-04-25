@@ -76,7 +76,6 @@ SURGE_CUSTOM_FIELDS: dict = {
 			"label": "Surge Client Request ID",
 			"read_only": 1,
 			"no_copy": 1,
-			"unique": 1,
 			"insert_after": "amended_from",
 		},
 		{

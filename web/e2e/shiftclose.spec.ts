@@ -9,6 +9,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { injectCashierSession } from "./support/auth";
 
 // ── Mock builders ─────────────────────────────────────────────────────────────
 
@@ -66,23 +67,23 @@ async function interceptAPI(
   });
 }
 
-async function goToSellScreen(page: import("@playwright/test").Page) {
+async function goToSellScreen(
+  page: import("@playwright/test").Page,
+  options: { accessLevel?: string; paymentModes?: string[] } = {},
+) {
+  await injectCashierSession(page, {
+    accessLevel: options.accessLevel ?? "Cashier",
+    paymentModes: options.paymentModes ?? ["Cash", "UPI"],
+  });
   await page.goto("/");
-  const pinInput = page.locator("input[type='password'], input[data-testid='pin-input']").first();
-  if (await pinInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await pinInput.fill("1234");
-    await page.keyboard.press("Enter");
-  }
-  await page.waitForSelector("[data-testid='sell-screen'], .sell-screen, main", { timeout: 10_000 });
+  await page.waitForSelector("main", { timeout: 10_000 });
 }
 
 // ── E01: Cashier cannot see Close Shift ──────────────────────────────────────
 
 test("E01: Cashier-level user does not see Close Shift button", async ({ page }) => {
-  await interceptAPI(page, {
-    "verify_pin": { status: "ok", user: "cashier@test.com", access_level: "Cashier", full_name: "Test Cashier" },
-  });
-  await goToSellScreen(page);
+  await interceptAPI(page);
+  await goToSellScreen(page, { accessLevel: "Cashier" });
 
   // Close Shift button must be absent for Cashier access level
   const closeShiftBtn = page
@@ -95,10 +96,8 @@ test("E01: Cashier-level user does not see Close Shift button", async ({ page })
 // ── E01-sanity: Manager CAN see Close Shift ───────────────────────────────────
 
 test("E01-sanity: Manager-level user sees Close Shift button", async ({ page }) => {
-  await interceptAPI(page, {
-    "verify_pin": { status: "ok", user: "manager@test.com", access_level: "Manager", full_name: "Test Manager" },
-  });
-  await goToSellScreen(page);
+  await interceptAPI(page);
+  await goToSellScreen(page, { accessLevel: "Manager" });
 
   const closeShiftBtn = page
     .locator("button:has-text('Close Shift')")
@@ -110,10 +109,8 @@ test("E01-sanity: Manager-level user sees Close Shift button", async ({ page }) 
 // ── E03: PaymentDialog absent while ShiftClose is open ───────────────────────
 
 test("E03: PaymentDialog is absent from DOM while ShiftClose dialog is active", async ({ page }) => {
-  await interceptAPI(page, {
-    "verify_pin": { status: "ok", user: "manager@test.com", access_level: "Manager", full_name: "Test Manager" },
-  });
-  await goToSellScreen(page);
+  await interceptAPI(page);
+  await goToSellScreen(page, { accessLevel: "Manager" });
 
   // Open ShiftClose dialog
   const closeBtn = page
@@ -122,9 +119,7 @@ test("E03: PaymentDialog is absent from DOM while ShiftClose dialog is active", 
 
   if (await closeBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await closeBtn.click();
-    await expect(
-      page.locator("[data-testid='shift-close-dialog'], [role='dialog']"),
-    ).toBeVisible({ timeout: 5_000 });
+    await expect(page.locator("text=Count your cash first")).toBeVisible({ timeout: 5_000 });
 
     // PaymentDialog must NOT be in the DOM simultaneously
     const paymentDialog = page
@@ -138,19 +133,23 @@ test("E03: PaymentDialog is absent from DOM while ShiftClose dialog is active", 
 // ── E04: Empty payment_modes shows error in ShiftClose ────────────────────────
 
 test("E04: ShiftClose with empty payment_modes shows error, not blank form", async ({ page }) => {
-  await interceptAPI(page, {
-    "get_pos_profile": mockPOSProfile([]),  // empty payment modes
-    "verify_pin": { status: "ok", user: "manager@test.com", access_level: "Manager", full_name: "Test Manager" },
-  });
-  await goToSellScreen(page);
+  await interceptAPI(page, { "get_pos_profile": mockPOSProfile([]) });
+  await goToSellScreen(page, { accessLevel: "Manager", paymentModes: [] });
 
-  // The shift close form should show an error or warning, not render empty inputs
+  // Open ShiftClose — only renders when shiftCloseOpen = true
+  const closeShiftBtn = page
+    .locator("button:has-text('Close Shift')")
+    .or(page.locator("[data-testid='close-shift-btn']"));
+  await expect(closeShiftBtn).toBeVisible({ timeout: 10_000 });
+  await closeShiftBtn.click();
+
+  // ShiftClose with empty payment_modes shows error guard, not blank form
   const errorMsg = page
     .locator("text=No payment modes")
     .or(page.locator(".text-destructive"))
     .or(page.locator("[data-testid='payment-modes-error']"));
 
-  await expect(errorMsg).toBeVisible({ timeout: 10_000 });
+  await expect(errorMsg).toBeVisible({ timeout: 5_000 });
 
   // Numeric closing-balance inputs must be absent
   const inputs = page.locator("input[type='number']");

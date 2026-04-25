@@ -14,7 +14,9 @@ Surge POS runs on ERPNext v15. Open `/surge` in any browser on your local networ
 2. [Configure](configuration) a POS Profile
 3. [Add cashiers](cashier-setup) and assign PINs
 4. [Open a session](session-security) — Frappe login → profile → PIN
-5. [Make a sale](making-a-sale)
+5. [Open a shift](shift-management) — enter opening cash balance
+6. [Make a sale](making-a-sale)
+7. [Close shift](shift-management#closing-a-shift-z-report) at end of day
 
 ## How identity works
 

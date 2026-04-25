@@ -47,9 +47,11 @@ Discounts beyond a cashier's limit require approval from a Supervisor or Manager
 ## Security
 
 - Approval tokens are HMAC-signed (SHA-256) and one-time-use.
-- A token consumed to create one invoice cannot be replayed for another.
+- A token consumed to create one invoice cannot be replayed for another (Redis-tracked; second use rejected with 403).
 - Tampered tokens are rejected with 403.
 - Manager PIN is verified server-side; the hash never leaves the server.
+- If the signing secret (HMAC key) is unavailable, token generation fails closed — no discount is applied silently.
+- If Redis is unavailable, the token store fails closed — replay protection remains enforced via fallback DB check.
 
 ## Notifications
 

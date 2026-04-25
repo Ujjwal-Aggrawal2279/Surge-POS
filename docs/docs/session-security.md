@@ -34,6 +34,16 @@ sidebar_position: 5
 - Click **I'm here** to dismiss and reset the 15-minute timer
 - At exactly 15 min → locked back to Cashier PIN screen
 
+**Timer is suppressed while any of these dialogs are open:**
+
+| Dialog | Behaviour |
+|---|---|
+| Payment dialog | Timer paused — no lock during active payment entry |
+| Logout confirm | Timer paused — cashier can take time to decide |
+| Shift close | Timer paused — counting cash shouldn't trigger a lock |
+
+Timer resets to zero after a successful shift close.
+
 ## Lock terminal
 
 Click the **Lock** button in the navbar at any time. Returns to the Cashier PIN screen. The Frappe session stays open — the next cashier just enters their PIN.
@@ -53,3 +63,15 @@ If a cashier is locked (3 wrong PINs), a Manager can clear the lockout:
 1. Log in as Manager on the same terminal.
 2. Call `surge.api.auth.override_lockout` with the Manager's PIN and the locked user's ID.
 3. Locked account cleared — cashier can try again.
+
+Only Supervisors and Managers can call this. A Cashier attempting to unlock anyone gets a `forbidden` response.
+
+## Forgot PIN
+
+If a cashier has forgotten their PIN:
+
+1. On the PIN screen, tap **Forgot PIN**.
+2. Surge sends a Frappe notification to all active Managers for the current POS Profile.
+3. A generic response is shown regardless of whether the user exists — no user disclosure.
+4. Rate-limited: only one notification per cashier per 5 minutes, regardless of how many times the button is pressed.
+5. Manager resets the PIN via `surge.api.auth.set_pin` (Desk console or Surge admin panel).

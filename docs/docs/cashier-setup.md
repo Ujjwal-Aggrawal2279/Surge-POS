@@ -30,6 +30,12 @@ sidebar_position: 4
 | Locked | 3 wrong PINs — 5-min cooldown |
 | No PIN | PIN not yet configured — contact Manager |
 
+## PIN security
+
+- PINs are stored as SHA-256 hashes — never in plaintext.
+- Existing plaintext PINs are auto-migrated to hashed form on first successful login.
+- Disabled Frappe users cannot log in even with a valid PIN.
+
 ## Shift handover
 
 **Lock** (not logout) for cashier switches — the Frappe session stays open, the next cashier just enters their PIN. Use **Logout** only when closing the terminal for the day.

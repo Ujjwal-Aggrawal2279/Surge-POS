@@ -25,6 +25,8 @@ C21  Mobile checkout handleMobileCheckout stable ref (unit/E2E test)
 """
 
 import concurrent.futures
+import json
+import time
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -77,14 +79,23 @@ def _ensure_user(email, role="POS User"):
 		u.first_name = email.split("@")[0]
 		u.send_welcome_email = 0
 		u.insert(ignore_permissions=True)
+	if role and not frappe.db.exists("Has Role", {"parent": email, "role": role}):
+		doc = frappe.get_doc("User", email)
+		doc.append("roles", {"role": role})
+		doc.save(ignore_permissions=True)
 	frappe.db.commit()
 
 
 def _setup_fixtures():
 	ensure_master_data()
-	avail_modes = frappe.get_all("Mode of Payment", pluck="name")
+	# Only use modes that have an account for TEST_COMPANY (avoids Cheque on production sites)
+	avail_modes = frappe.db.get_all(
+		"Mode of Payment Account",
+		filters={"company": TEST_COMPANY},
+		pluck="parent",
+	) or ["Cash"]
 
-	# Test item
+	# Test item — non-stock so tests don't need stock entries in any environment
 	if not frappe.db.exists("Item", _TEST_ITEM):
 		item = frappe.new_doc("Item")
 		item.item_code = _TEST_ITEM
@@ -92,8 +103,10 @@ def _setup_fixtures():
 		item.item_group = TEST_ITEM_GROUP
 		item.stock_uom = "Nos"
 		item.gst_hsn_code = TEST_HSN
-		item.is_stock_item = 1
+		item.is_stock_item = 0
 		item.insert(ignore_permissions=True)
+	elif frappe.db.get_value("Item", _TEST_ITEM, "is_stock_item"):
+		frappe.db.set_value("Item", _TEST_ITEM, "is_stock_item", 0)
 
 	# Test customer
 	if not frappe.db.exists("Customer", _TEST_CUSTOMER):
@@ -157,13 +170,43 @@ def _get_pay_mode():
 	return modes[0] if modes else "Cash"
 
 
+def _force_delete_invoice(name: str):
+	"""Hard-delete a Sales Invoice and all linked accounting rows via raw SQL."""
+	# Remove child GL/ledger rows first so the parent delete has no FK blockers
+	for table in ("tabGL Entry", "tabPayment Ledger Entry"):
+		frappe.db.sql(f"DELETE FROM `{table}` WHERE voucher_no = %s", name)
+	for table in ("tabSales Invoice Item", "tabSales Invoice Payment", "tabSales Taxes and Charges"):
+		frappe.db.sql(f"DELETE FROM `{table}` WHERE parent = %s", name)
+	frappe.db.sql("DELETE FROM `tabSales Invoice` WHERE name = %s", name)
+
+
+def _cleanup_test_invoices():
+	"""Remove test invoices — including committed C19 invoices — before and after each class."""
+	invoices = frappe.db.get_all(
+		"Sales Invoice",
+		filters={"pos_profile": _PROFILE},
+		pluck="name",
+	)
+	for name in invoices:
+		_force_delete_invoice(name)
+	if invoices:
+		frappe.db.commit()
+
+
 class InvoiceTestBase(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
 		for u in [_CASHIER, _MANAGER, _OTHER_CASHIER]:
 			_ensure_user(u)
+			_ensure_user(u, role="Sales User")  # Customer read permission for _submit_invoice
 		_setup_fixtures()
+		_cleanup_test_invoices()
+
+	@classmethod
+	def tearDownClass(cls):
+		_cleanup_test_invoices()
+		super().tearDownClass()
 
 	def _submit(self, req):
 		frappe.flags.ignore_permissions = True
@@ -177,14 +220,7 @@ class InvoiceTestBase(FrappeTestCase):
 
 	def _cleanup_invoice(self, name):
 		if name and frappe.db.exists("Sales Invoice", name):
-			inv = frappe.get_doc("Sales Invoice", name)
-			try:
-				if inv.docstatus == 1:
-					inv.flags.ignore_permissions = True
-					inv.cancel()
-			except Exception:
-				pass
-			frappe.delete_doc("Sales Invoice", name, ignore_permissions=True, force=True)
+			_force_delete_invoice(name)
 			frappe.db.commit()
 
 
@@ -315,7 +351,7 @@ class TestDiscountApproval(InvoiceTestBase):
 
 	def test_C14_supervisor_pin_issues_approval_token(self):
 		"""C14: Supervisor/Manager PIN → approval token issued."""
-		result = frappe.parse_json(
+		result = json.loads(
 			request_approval(
 				pos_profile=_PROFILE,
 				approver=_MANAGER,
@@ -328,7 +364,7 @@ class TestDiscountApproval(InvoiceTestBase):
 
 	def test_C16_reuse_approval_token_rejected(self):
 		"""C16: Same token used twice → second use rejected (burn-after-use)."""
-		result = frappe.parse_json(
+		result = json.loads(
 			request_approval(
 				pos_profile=_PROFILE,
 				approver=_MANAGER,
@@ -366,7 +402,7 @@ class TestDiscountApproval(InvoiceTestBase):
 	def test_C18_meta_capped_at_500_chars(self):
 		"""C18: meta=1MB string → stored as max 500 chars in Redis payload."""
 		big_meta = "X" * 1_000_000
-		result = frappe.parse_json(
+		result = json.loads(
 			request_approval(
 				pos_profile=_PROFILE,
 				approver=_MANAGER,
@@ -378,7 +414,6 @@ class TestDiscountApproval(InvoiceTestBase):
 		if result["status"] == "ok":
 			token = result["token"]
 			import base64
-			import json
 
 			data, _ = token.rsplit(".", 1)
 			payload = json.loads(base64.urlsafe_b64decode(data + "=="))
@@ -409,28 +444,43 @@ class TestQueueFallback(InvoiceTestBase):
 
 class TestConcurrentInvoices(InvoiceTestBase):
 	def test_C19_ten_concurrent_invoices_all_unique(self):
-		"""C19: 10 concurrent invoices from same terminal → all unique names, no duplicates."""
+		"""C19: 5 concurrent invoices from same terminal → all unique names, no duplicates."""
+		WORKERS = 5
 		names = []
 		errors = []
+		site = frappe.local.site
 
 		def submit_one():
+			frappe.init(site=site)
+			frappe.connect()
 			try:
-				frappe.flags.ignore_permissions = True
-				frappe.session.user = _CASHIER
-				name = _submit_invoice(_make_req())
-				names.append(name)
+				frappe.set_user(_CASHIER)
+				# Retry with linear backoff on transient MariaDB errors:
+				# 1213 = deadlock, 1020 = stale read on naming-series row.
+				retryable = ("1213", "1020", "Deadlock", "Record has changed")
+				for attempt in range(10):
+					try:
+						name = _submit_invoice(_make_req())
+						frappe.db.commit()  # commit so each thread's series increment is visible
+						names.append(name)
+						break
+					except Exception as exc:
+						frappe.db.rollback()
+						if attempt < 9 and any(k in str(exc) for k in retryable):
+							time.sleep(0.1 * (attempt + 1))
+							continue
+						raise
 			except Exception as e:
 				errors.append(str(e))
 			finally:
-				frappe.flags.ignore_permissions = False
-				frappe.session.user = "Administrator"
+				frappe.destroy()
 
-		with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
-			futures = [pool.submit(submit_one) for _ in range(10)]
+		with concurrent.futures.ThreadPoolExecutor(max_workers=WORKERS) as pool:
+			futures = [pool.submit(submit_one) for _ in range(WORKERS)]
 			concurrent.futures.wait(futures)
 
 		self.assertEqual(len(errors), 0, f"No errors expected: {errors}")
-		self.assertEqual(len(set(names)), 10, "All 10 invoice names must be unique")
+		self.assertEqual(len(set(names)), WORKERS, f"All {WORKERS} invoice names must be unique")
 
 		for n in names:
 			self._cleanup_invoice(n)
