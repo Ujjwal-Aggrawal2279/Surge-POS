@@ -14,6 +14,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { injectCashierSession } from "./support/auth";
 
 const WARN_MS = 14 * 60 * 1000 + 45 * 1000; // 14m45s
 const LOCK_MS = 15 * 60 * 1000;              // 15m00s
@@ -42,16 +43,10 @@ async function interceptWithSession(page: import("@playwright/test").Page) {
 
 async function loginAndNavigateToSell(page: import("@playwright/test").Page) {
   await interceptWithSession(page);
+  await injectCashierSession(page);
   await page.clock.install();
   await page.goto("/");
-  // Complete PIN entry to reach the sell screen
-  const pinInput = page.locator("input[type='password'], input[data-testid='pin-input']").first();
-  if (await pinInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await pinInput.fill("1234");
-    await page.keyboard.press("Enter");
-  }
-  // Wait for sell screen to be visible
-  await page.waitForSelector("[data-testid='sell-screen'], .sell-screen, main", { timeout: 10_000 });
+  await page.waitForSelector("main", { timeout: 10_000 });
 }
 
 // ── D01: Idle warning at 14m45s ───────────────────────────────────────────────
@@ -182,6 +177,7 @@ test("D07: idle timer resets after shift close completes", async ({ page }) => {
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ message: null }) });
   });
 
+  await injectCashierSession(page);
   await page.clock.install();
   await page.goto("/");
 

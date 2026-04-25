@@ -9,6 +9,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { injectCashierSession } from "./support/auth";
 
 // ── Shared mock builders ───────────────────────────────────────────────────
 
@@ -73,15 +74,11 @@ async function interceptAPI(
 
 test("H1: stale session shows amber warning banner", async ({ page }) => {
   await interceptAPI(page, {
-    // get_active_session returns stale: true (session from yesterday)
     "surge.api.session.get_active_session": { session: null, stale: true },
-    // Profile is valid with payment modes
     "surge.api.session.get_pos_profile": mockPOSProfile(),
-    // Cashier data
     "surge.api.auth.get_cashiers": { cashiers: [mockCashier()] },
   });
-
-  // Navigate to the POS app — replace with your actual route
+  await injectCashierSession(page, { paymentModes: ["Cash", "UPI"] });
   await page.goto("/");
 
   // Wait for ShiftOpen to render (after PIN screen)
@@ -101,10 +98,10 @@ test("H1: stale session shows amber warning banner", async ({ page }) => {
 test("H2: empty payment_modes shows error message, not blank form", async ({ page }) => {
   await interceptAPI(page, {
     "surge.api.session.get_active_session": { session: null, stale: false },
-    "surge.api.session.get_pos_profile": mockPOSProfile([]),  // empty!
+    "surge.api.session.get_pos_profile": mockPOSProfile([]),
     "surge.api.auth.get_cashiers": { cashiers: [mockCashier()] },
   });
-
+  await injectCashierSession(page, { paymentModes: [] });
   await page.goto("/");
 
   // Error message must be visible
@@ -126,7 +123,7 @@ test("H2-sanity: valid payment_modes renders input fields", async ({ page }) => 
     "surge.api.session.get_pos_profile": mockPOSProfile(["Cash", "UPI"]),
     "surge.api.auth.get_cashiers": { cashiers: [mockCashier()] },
   });
-
+  await injectCashierSession(page, { paymentModes: ["Cash", "UPI"] });
   await page.goto("/");
 
   // Two numeric inputs should exist (one per payment mode)

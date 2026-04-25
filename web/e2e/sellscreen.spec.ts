@@ -8,6 +8,7 @@
  */
 
 import { test, expect } from "@playwright/test";
+import { injectCashierSession } from "./support/auth";
 
 // ── Shared mocks ──────────────────────────────────────────────────────────
 
@@ -88,6 +89,7 @@ async function interceptSellScreen(page: import("@playwright/test").Page) {
 
 test("H3: PaymentDialog is absent from DOM when ShiftClose overlay is open", async ({ page }) => {
   await interceptSellScreen(page);
+  await injectCashierSession(page, { accessLevel: "Manager" });
   await page.goto("/");
 
   // Wait for the SellScreen to load (assumes session is active)
@@ -111,12 +113,8 @@ test("H3: PaymentDialog is absent from DOM when ShiftClose overlay is open", asy
 // ── H4: Idle lock warning behavior ───────────────────────────────────────
 
 test("H4: idle lock warning does not fire while logout modal is open", async ({ page }) => {
-  // This test verifies the disabled prop on useIdleLock is correctly wired.
-  // We override the idle timeout to a very short value via URL param or env.
-  // Since we can't easily override the 15min timeout in a spec,
-  // we verify the structural correctness: the dismissWarning button appears
-  // when no modal is blocking it.
   await interceptSellScreen(page);
+  await injectCashierSession(page, { accessLevel: "Manager" });
   await page.goto("/");
   await page.waitForSelector("button:has-text('Lock')", { timeout: 15_000 });
 
@@ -139,6 +137,7 @@ test("H4: idle lock warning does not fire while logout modal is open", async ({ 
 
 test("H3-sanity: PaymentDialog can be triggered when ShiftClose is not open", async ({ page }) => {
   await interceptSellScreen(page);
+  await injectCashierSession(page, { accessLevel: "Manager" });
   await page.goto("/");
 
   // ShiftClose should NOT be open
