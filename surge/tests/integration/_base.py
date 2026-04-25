@@ -24,6 +24,7 @@ TEST_HSN = "220300"  # 6 digits — india_compliance min_hsn_digits=6; Beer HSN
 
 
 def ensure_master_data():
+	_ensure_warehouse_types()
 	_ensure_company()
 	_ensure_uom()
 	_ensure_item_group()
@@ -36,6 +37,15 @@ def ensure_master_data():
 
 
 # ── Internals ────────────────────────────────────────────────────────────────
+
+
+def _ensure_warehouse_types():
+	# ERPNext create_default_warehouses() sets warehouse_type="Transit" on the
+	# "Goods In Transit" warehouse. Fresh sites have no Warehouse Type records.
+	if not frappe.db.exists("Warehouse Type", "Transit"):
+		wt = frappe.new_doc("Warehouse Type")
+		wt.warehouse_type = "Transit"
+		wt.insert(ignore_permissions=True)
 
 
 def _ensure_company():
