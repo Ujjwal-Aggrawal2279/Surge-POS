@@ -112,7 +112,7 @@ class AuthTestBase(FrappeTestCase):
 			p.warehouse = wh
 			p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
 			for m in modes:
-				p.append("payments", {"mode_of_payment": m})
+				p.append("payments", {"mode_of_payment": m, "default": 1})
 			p.insert(ignore_permissions=True)
 			frappe.db.commit()
 
