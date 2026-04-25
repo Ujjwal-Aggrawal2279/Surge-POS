@@ -217,7 +217,7 @@ jobs:
       - name: Install test dependencies in bench env
         run: |
           cd frappe-bench
-          ./env/bin/pip install hypothesis msgspec coverage
+          ./env/bin/pip install pytest hypothesis msgspec coverage
 
       - name: "Run integration tests — Groups A–G"
         run: |
