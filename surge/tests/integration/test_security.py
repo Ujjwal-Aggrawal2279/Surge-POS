@@ -27,6 +27,7 @@ from surge.api.invoices import (
 	_submit_invoice,
 )
 from surge.overrides.sales_invoice import on_submit as inv_on_submit
+from surge.tests.integration._base import ensure_master_data
 
 _PROFILE = "_HSecProfile"
 _CASHIER = "h_cashier@test.surge"
@@ -44,6 +45,7 @@ def _ensure_user(email):
 
 
 def _setup():
+	ensure_master_data()
 	company = frappe.db.get_single_value("Global Defaults", "default_company")
 	wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 

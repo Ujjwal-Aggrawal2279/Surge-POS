@@ -17,6 +17,7 @@ G11  Supervisor-level user fails require_surge_manager_role (Supervisor ≠ Mana
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from surge.tests.integration._base import ensure_master_data
 from surge.utils.permissions import (
 	require_pos_profile_access,
 	require_surge_manager_role,
@@ -56,6 +57,7 @@ def _ensure_user(email, enabled=1, roles=None):
 
 
 def _make_profile(name, users=None, warehouse=None):
+	ensure_master_data()
 	if frappe.db.exists("POS Profile", name):
 		frappe.delete_doc("POS Profile", name, ignore_permissions=True, force=True)
 		frappe.db.commit()
