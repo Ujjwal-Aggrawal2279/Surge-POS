@@ -72,7 +72,15 @@ def get_conflicts():
 	conflicts = frappe.get_all(
 		"Surge Sync Conflict",
 		filters={"resolution": "Pending Review"},
-		fields=["name", "client_req_id", "terminal_id", "conflict_type", "conflict_detail", "payload", "creation"],
+		fields=[
+			"name",
+			"client_req_id",
+			"terminal_id",
+			"conflict_type",
+			"conflict_detail",
+			"payload",
+			"creation",
+		],
 		order_by="creation asc",
 		limit=50,
 	)
