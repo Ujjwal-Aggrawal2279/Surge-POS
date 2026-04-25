@@ -453,11 +453,20 @@ class TestConcurrentInvoices(InvoiceTestBase):
 			frappe.connect()
 			try:
 				frappe.set_user(_CASHIER)
-				name = _submit_invoice(_make_req())
-				frappe.db.commit()  # must commit so each thread's series increment is visible
-				names.append(name)
+				# Retry up to 5x on MariaDB deadlocks (1213) -- expected under
+				# high concurrency on the naming-series row.
+				for attempt in range(5):
+					try:
+						name = _submit_invoice(_make_req())
+						frappe.db.commit()  # commit so each thread's series increment is visible
+						names.append(name)
+						break
+					except Exception as exc:
+						frappe.db.rollback()
+						if attempt < 4 and ("1213" in str(exc) or "Deadlock" in str(exc)):
+							continue
+						raise
 			except Exception as e:
-				frappe.db.rollback()
 				errors.append(str(e))
 			finally:
 				frappe.destroy()

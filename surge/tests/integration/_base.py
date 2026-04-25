@@ -28,6 +28,7 @@ TEST_COST_CENTER = f"Main - {TEST_ABBR}"
 def ensure_master_data():
 	_ensure_warehouse_types()
 	_ensure_company()
+	_ensure_fiscal_year()
 	_ensure_uom()
 	_ensure_item_group()
 	_ensure_customer_group()
@@ -49,6 +50,35 @@ def _ensure_warehouse_types():
 		wt = frappe.new_doc("Warehouse Type")
 		wt.name = "Transit"
 		wt.insert(ignore_permissions=True)
+
+
+def _ensure_fiscal_year():
+	from frappe.utils import getdate
+
+	today = getdate()
+	# India fiscal year runs April 1 → March 31 of next year
+	if today.month >= 4:
+		fy_start = f"{today.year}-04-01"
+		fy_end = f"{today.year + 1}-03-31"
+		fy_name = f"{today.year}-{today.year + 1}"
+	else:
+		fy_start = f"{today.year - 1}-04-01"
+		fy_end = f"{today.year}-03-31"
+		fy_name = f"{today.year - 1}-{today.year}"
+
+	if not frappe.db.exists("Fiscal Year", fy_name):
+		fy = frappe.new_doc("Fiscal Year")
+		fy.year = fy_name
+		fy.year_start_date = fy_start
+		fy.year_end_date = fy_end
+		fy.append("companies", {"company": TEST_COMPANY})
+		fy.insert(ignore_permissions=True)
+		frappe.db.commit()
+	elif not frappe.db.exists("Fiscal Year Company", {"parent": fy_name, "company": TEST_COMPANY}):
+		fy_doc = frappe.get_doc("Fiscal Year", fy_name)
+		fy_doc.append("companies", {"company": TEST_COMPANY})
+		fy_doc.save(ignore_permissions=True)
+		frappe.db.commit()
 
 
 def _ensure_company():
