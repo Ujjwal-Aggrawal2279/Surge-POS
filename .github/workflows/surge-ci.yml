@@ -124,17 +124,10 @@ jobs:
 
     services:
       mariadb:
-        image: mariadb:10.6
+        image: mariadb:11.8
         env:
-          MARIADB_ROOT_PASSWORD: frappe
-          MARIADB_DATABASE: _test_frappe
-          MARIADB_USER: frappe
-          MARIADB_PASSWORD: frappe
-        options: >-
-          --health-cmd="mysqladmin ping --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
+          MARIADB_ROOT_PASSWORD: travis
+        options: --health-cmd="mariadb-admin ping" --health-interval=5s --health-timeout=2s --health-retries=3
         ports:
           - 3306:3306
 
@@ -159,16 +152,17 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+          check-latest: true
 
       - name: Install system dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y mariadb-client wkhtmltopdf libssl-dev
+          sudo apt-get install -y libcups2-dev redis-server mariadb-client wkhtmltopdf libssl-dev
 
       - name: Install frappe-bench
         run: pip install frappe-bench
 
-      - name: Cache bench pip packages
+      - name: Cache pip
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
@@ -178,13 +172,14 @@ jobs:
       - name: Initialize frappe bench
         run: |
           bench init \
+            --skip-assets \
             --skip-redis-config-generation \
             --frappe-branch ${{ matrix.frappe_branch }} \
             frappe-bench
         env:
           CI: true
 
-      - name: Get ERPNext and Surge
+      - name: Get ERPNext, india_compliance, and Surge
         run: |
           cd frappe-bench
           bench get-app erpnext --branch ${{ matrix.frappe_branch }}
@@ -205,11 +200,11 @@ jobs:
           }
           EOF
 
-      - name: Create test site
+      - name: Create test site and install apps
         run: |
           cd frappe-bench
           bench new-site test.localhost \
-            --mariadb-root-password frappe \
+            --mariadb-root-password travis \
             --admin-password admin \
             --no-mariadb-socket
           bench --site test.localhost install-app erpnext
@@ -219,40 +214,26 @@ jobs:
         env:
           CI: true
 
-      - name: Symlink site for Frappe v16 path resolution
-        run: |
-          # Frappe v16 resolves sites as {bench}/{site}/ (bench root = sites_path).
-          # Create a symlink so frappe-bench/test.localhost → frappe-bench/sites/test.localhost
-          ln -s ${{ github.workspace }}/frappe-bench/sites/test.localhost \
-                ${{ github.workspace }}/frappe-bench/test.localhost
-
-      - name: Install pytest and dependencies in bench env
+      - name: Install test dependencies in bench env
         run: |
           cd frappe-bench
-          ./env/bin/pip install pytest pytest-cov hypothesis msgspec
+          ./env/bin/pip install hypothesis msgspec
 
       - name: "Run integration tests — Groups A–G"
         run: |
           cd frappe-bench
-          ./env/bin/pytest \
-            apps/surge/surge/tests/integration/ \
-            -v \
-            --tb=short \
-            --cov=apps/surge/surge/api \
-            --cov=apps/surge/surge/utils \
-            --cov-report=xml:coverage-integration.xml \
-            --cov-report=term-missing \
-            --cov-fail-under=80
+          bench --site test.localhost run-parallel-tests \
+            --app surge \
+            --with-coverage
         env:
-          FRAPPE_SITE: test.localhost
-          FRAPPE_BENCH: ${{ github.workspace }}/frappe-bench
+          CI: true
 
       - name: Upload integration coverage
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: coverage-integration-${{ matrix.frappe_branch }}
-          path: frappe-bench/coverage-integration.xml
+          path: frappe-bench/sites/coverage.xml
 
 # ── Job 4: E2E Tests (Playwright) ────────────────────────────────────────────
   e2e:
