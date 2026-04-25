@@ -99,9 +99,8 @@ jobs:
           pytest surge/tests/unit/ \
             -v \
             --tb=short \
-            -m unit \
             --hypothesis-seed=0 \
-            --cov=surge/api \
+            --cov=surge/api/auth \
             --cov=surge/utils \
             --cov-report=xml:coverage-unit.xml \
             --cov-report=term-missing
