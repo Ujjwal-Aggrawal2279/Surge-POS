@@ -453,8 +453,9 @@ class TestConcurrentInvoices(InvoiceTestBase):
 			frappe.connect()
 			try:
 				frappe.set_user(_CASHIER)
-				# Retry up to 5x on MariaDB deadlocks (1213) -- expected under
-				# high concurrency on the naming-series row.
+				# Retry on transient MariaDB errors (1213 deadlock, 1020 stale read)
+				# which occur under high concurrency on the naming-series row.
+				retryable = ("1213", "1020", "Deadlock", "Record has changed")
 				for attempt in range(5):
 					try:
 						name = _submit_invoice(_make_req())
@@ -463,7 +464,7 @@ class TestConcurrentInvoices(InvoiceTestBase):
 						break
 					except Exception as exc:
 						frappe.db.rollback()
-						if attempt < 4 and ("1213" in str(exc) or "Deadlock" in str(exc)):
+						if attempt < 4 and any(k in str(exc) for k in retryable):
 							continue
 						raise
 			except Exception as e:
