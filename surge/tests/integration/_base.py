@@ -21,6 +21,8 @@ TEST_CUSTOMER_GROUP = "_Test Surge Customer Group"
 TEST_TERRITORY = "_Test Surge Territory"
 TEST_PRICE_LIST = "_Test Surge Price List"
 TEST_HSN = "220300"  # 6 digits — india_compliance min_hsn_digits=6; Beer HSN
+TEST_WRITE_OFF_ACCOUNT = f"Write Off - {TEST_ABBR}"
+TEST_COST_CENTER = f"Main - {TEST_ABBR}"
 
 
 def ensure_master_data():

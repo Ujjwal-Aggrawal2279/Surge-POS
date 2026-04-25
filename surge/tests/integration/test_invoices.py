@@ -45,12 +45,14 @@ from surge.api.invoices import (
 from surge.jobs.queue import enqueue_invoice
 from surge.tests.integration._base import (
 	TEST_COMPANY,
+	TEST_COST_CENTER,
 	TEST_CUSTOMER_GROUP,
 	TEST_HSN,
 	TEST_ITEM_GROUP,
 	TEST_PRICE_LIST,
 	TEST_TERRITORY,
 	TEST_WAREHOUSE,
+	TEST_WRITE_OFF_ACCOUNT,
 	ensure_master_data,
 )
 
@@ -128,6 +130,9 @@ def _setup_fixtures():
 					"surge_pos_pin": pin,
 				},
 			)
+		p.currency = "INR"
+		p.write_off_account = TEST_WRITE_OFF_ACCOUNT
+		p.write_off_cost_center = TEST_COST_CENTER
 		p.insert(ignore_permissions=True)
 
 	frappe.db.commit()

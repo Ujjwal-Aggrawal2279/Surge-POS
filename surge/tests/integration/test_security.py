@@ -29,10 +29,12 @@ from surge.api.invoices import (
 from surge.overrides.sales_invoice import on_submit as inv_on_submit
 from surge.tests.integration._base import (
 	TEST_COMPANY,
+	TEST_COST_CENTER,
 	TEST_HSN,
 	TEST_ITEM_GROUP,
 	TEST_PRICE_LIST,
 	TEST_WAREHOUSE,
+	TEST_WRITE_OFF_ACCOUNT,
 	ensure_master_data,
 )
 
@@ -81,6 +83,9 @@ def _setup():
 				"access_level": "Cashier",
 			},
 		)
+		p.currency = "INR"
+		p.write_off_account = TEST_WRITE_OFF_ACCOUNT
+		p.write_off_cost_center = TEST_COST_CENTER
 		p.insert(ignore_permissions=True)
 
 	frappe.db.commit()

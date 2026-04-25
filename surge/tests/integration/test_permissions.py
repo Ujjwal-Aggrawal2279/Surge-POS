@@ -19,8 +19,10 @@ from frappe.tests.utils import FrappeTestCase
 
 from surge.tests.integration._base import (
 	TEST_COMPANY,
+	TEST_COST_CENTER,
 	TEST_PRICE_LIST,
 	TEST_WAREHOUSE,
+	TEST_WRITE_OFF_ACCOUNT,
 	ensure_master_data,
 )
 from surge.utils.permissions import (
@@ -82,6 +84,9 @@ def _make_profile(name, users=None, warehouse=None):
 				"access_level": u.get("access_level", "Cashier"),
 			},
 		)
+	p.currency = "INR"
+	p.write_off_account = TEST_WRITE_OFF_ACCOUNT
+	p.write_off_cost_center = TEST_COST_CENTER
 	p.insert(ignore_permissions=True)
 	frappe.db.commit()
 	return p
