@@ -42,8 +42,10 @@ from frappe.utils import get_date_str, now_datetime, nowdate
 from surge.api.session import _build_z_report, close_session, get_active_session, open_session
 from surge.tests.integration._base import (
 	TEST_COMPANY,
+	TEST_COST_CENTER,
 	TEST_PRICE_LIST,
 	TEST_WAREHOUSE,
+	TEST_WRITE_OFF_ACCOUNT,
 	ensure_master_data,
 )
 
@@ -102,6 +104,9 @@ def _create_test_profile(modes=None):
 		"applicable_for_users",
 		{"user": _INACTIVE, "status": "Inactive", "access_level": "Cashier"},
 	)
+	p.currency = "INR"
+	p.write_off_account = TEST_WRITE_OFF_ACCOUNT
+	p.write_off_cost_center = TEST_COST_CENTER
 	p.insert(ignore_permissions=True)
 	frappe.db.commit()
 

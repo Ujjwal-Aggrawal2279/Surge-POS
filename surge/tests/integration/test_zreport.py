@@ -24,8 +24,10 @@ from frappe.utils import now_datetime, nowdate
 from surge.api.session import _build_z_report
 from surge.tests.integration._base import (
 	TEST_COMPANY,
+	TEST_COST_CENTER,
 	TEST_PRICE_LIST,
 	TEST_WAREHOUSE,
+	TEST_WRITE_OFF_ACCOUNT,
 	ensure_master_data,
 )
 
@@ -113,6 +115,9 @@ class ZReportBase(FrappeTestCase):
 			p.selling_price_list = TEST_PRICE_LIST
 			for i, m in enumerate(frappe.get_all("Mode of Payment", limit=2, pluck="name")):
 				p.append("payments", {"mode_of_payment": m, "default": 1 if i == 0 else 0})
+			p.currency = "INR"
+			p.write_off_account = TEST_WRITE_OFF_ACCOUNT
+			p.write_off_cost_center = TEST_COST_CENTER
 			p.insert(ignore_permissions=True)
 			frappe.db.commit()
 
