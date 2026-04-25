@@ -63,3 +63,40 @@ typing-modules = ["frappe.types.DF"]
 quote-style = "double"
 indent-style = "tab"
 docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["surge/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--tb=short",
+    "--strict-markers",
+]
+markers = [
+    "unit: pure Python tests, no Frappe/DB required",
+    "integration: requires a live Frappe site and MariaDB",
+    "e2e: end-to-end browser tests via Playwright",
+]
+
+[tool.coverage.run]
+source = ["surge/api", "surge/utils", "surge/overrides", "surge/jobs"]
+omit = ["surge/tests/*", "surge/setup/*", "**/__pycache__/*"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 85
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
+[tool.hypothesis]
+max_examples = 100
+deriving = true
+suppress_health_check = ["too_slow"]
+
+# Test dependencies (pip install in CI via workflow step)
+# pytest>=8.0.0, hypothesis>=6.100.0, pytest-cov>=5.0.0

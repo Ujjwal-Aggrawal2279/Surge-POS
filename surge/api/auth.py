@@ -8,7 +8,7 @@ import frappe
 from frappe.utils import add_to_date, now_datetime
 
 from surge.utils.json import surge_response
-from surge.utils.permissions import require_pos_profile_access
+from surge.utils.permissions import require_pos_profile_access, require_pos_role
 
 PIN_MAX_ATTEMPTS = 3
 PIN_LOCKOUT_SECONDS = 300
@@ -20,6 +20,9 @@ _TOKEN_KEY = "surge:approval_token:{token_hash}"
 _APPROVAL_REQ_KEY = "surge:approval_req:{req_id}"
 _APPROVAL_RES_KEY = "surge:approval_res:{req_id}"
 _APPROVAL_PENDING_KEY = "surge:approval_pending:{approver}"
+_FORGOT_PIN_RATE_KEY = "surge:forgot_pin_rate:{user}:{profile}"
+
+FORGOT_PIN_RATE_LIMIT_SEC = 3600  # one request per user per profile per hour
 
 
 @frappe.whitelist(allow_guest=False)
@@ -85,7 +88,14 @@ def verify_pin(pos_profile: str, user: str, pin: str) -> object:
 	if not row.surge_pos_pin:
 		return surge_response({"status": "no_pin"})
 
-	if pin != _hash_pin(row.surge_pos_pin):
+	stored = row.surge_pos_pin
+	# Migration: if stored is plaintext digits, compare via hash and upgrade storage on success
+	if _is_hashed(stored):
+		pin_match = hmac.compare_digest(pin, stored)
+	else:
+		pin_match = hmac.compare_digest(pin, _hash_pin(stored))
+
+	if not pin_match:
 		attempts = _increment_attempts(user, pos_profile)
 		remaining = PIN_MAX_ATTEMPTS - attempts
 		if remaining <= 0:
@@ -97,6 +107,10 @@ def verify_pin(pos_profile: str, user: str, pin: str) -> object:
 				}
 			)
 		return surge_response({"status": "wrong_pin", "attempts_left": remaining})
+
+	# Migrate plaintext PIN to hashed storage on first successful auth
+	if not _is_hashed(stored):
+		frappe.db.set_value("POS Profile User", row.name, "surge_pos_pin", pin)
 
 	_clear_attempts(user, pos_profile)
 	full_name = frappe.db.get_value("User", user, "full_name")
@@ -132,7 +146,7 @@ def set_pin(user: str, pin: str, pos_profile: str) -> object:
 			frappe.ValidationError,
 		)
 
-	frappe.db.set_value("POS Profile User", row_name, "surge_pos_pin", pin)
+	frappe.db.set_value("POS Profile User", row_name, "surge_pos_pin", _hash_pin(pin))
 	frappe.db.commit()
 
 	_log_action("pin_set", user=user, profile=pos_profile, by=frappe.session.user)
@@ -186,7 +200,17 @@ def forgot_pin(user: str, pos_profile: str) -> object:
 		"POS Profile User",
 		{"parent": pos_profile, "user": user, "status": "Active"},
 	):
-		return surge_response({"status": "error", "message": "User not active on this profile."})
+		# Return generic message to avoid disclosing whether the user exists
+		return surge_response({"status": "ok", "message": "If found, managers have been notified."})
+
+	# Rate limit: 1 request per user per profile per hour
+	rate_key = _FORGOT_PIN_RATE_KEY.format(user=user, profile=pos_profile)
+	try:
+		if frappe.cache().get_value(rate_key):
+			return surge_response({"status": "ok", "message": "If found, managers have been notified."})
+		frappe.cache().set_value(rate_key, "1", expires_in_sec=FORGOT_PIN_RATE_LIMIT_SEC)
+	except Exception:
+		pass  # Redis down — allow through but don't crash
 
 	cashier_name = frappe.db.get_value("User", user, "full_name")
 	if not cashier_name:
@@ -255,6 +279,7 @@ def request_approval(pos_profile: str, approver: str, pin: str, action: str, met
 	Token is one-time-use with a 5-minute TTL.
 	"""
 	require_pos_profile_access(pos_profile)
+	meta = (meta or "")[:500]  # cap to prevent oversized Redis entries
 
 	pin = (pin or "").strip()
 	if len(pin) != 64 or not all(c in "0123456789abcdef" for c in pin):
@@ -274,7 +299,11 @@ def request_approval(pos_profile: str, approver: str, pin: str, action: str, met
 			{"status": "forbidden", "message": "Only Supervisors and Managers can approve."}
 		)
 
-	if not row.surge_pos_pin or pin != _hash_pin(row.surge_pos_pin):
+	stored = row.surge_pos_pin
+	if not stored:
+		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
+	pin_match = hmac.compare_digest(pin, stored) if _is_hashed(stored) else hmac.compare_digest(pin, _hash_pin(stored))
+	if not pin_match:
 		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
 
 	payload = {
@@ -307,6 +336,7 @@ def request_approval(pos_profile: str, approver: str, pin: str, action: str, met
 def request_approval_remote(pos_profile: str, approver: str, action: str, meta: str = "") -> object:
 	"""Cashier initiates a remote approval — stored in Redis, pushed to approver via realtime."""
 	require_pos_profile_access(pos_profile)
+	meta = (meta or "")[:500]
 
 	row = frappe.db.get_value(
 		"POS Profile User",
@@ -382,6 +412,7 @@ def request_approval_remote(pos_profile: str, approver: str, action: str, meta: 
 @frappe.whitelist(allow_guest=False)
 def cancel_approval_request(req_id: str) -> object:
 	"""Cashier cancels their own pending remote approval request."""
+	require_pos_role()
 	cashier = frappe.session.user
 	cache = frappe.cache()
 	req_cache_key = _APPROVAL_REQ_KEY.format(req_id=req_id)
@@ -422,6 +453,7 @@ def cancel_approval_request(req_id: str) -> object:
 @frappe.whitelist(allow_guest=False)
 def respond_to_approval(req_id: str, pin: str, decision: str) -> object:
 	"""Approver enters their PIN to approve or deny a pending remote request."""
+	require_pos_role()
 	approver = frappe.session.user
 
 	pin = (pin or "").strip()
@@ -454,7 +486,11 @@ def respond_to_approval(req_id: str, pin: str, decision: str) -> object:
 	if not row or row.access_level not in ("Supervisor", "Manager"):
 		return surge_response({"status": "forbidden"})
 
-	if not row.surge_pos_pin or pin != _hash_pin(row.surge_pos_pin):
+	stored = row.surge_pos_pin
+	if not stored:
+		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
+	pin_match = hmac.compare_digest(pin, stored) if _is_hashed(stored) else hmac.compare_digest(pin, _hash_pin(stored))
+	if not pin_match:
 		return surge_response({"status": "wrong_pin", "message": "Incorrect PIN."})
 
 	# Consume the request — delete only after PIN is verified to avoid consuming on wrong PIN
@@ -470,9 +506,7 @@ def respond_to_approval(req_id: str, pin: str, decision: str) -> object:
 		pass
 
 	cashier_user = req["cashier"]
-
-	cashier = req.get("cashier", cashier_user)
-	_mark_approval_notification_read(approver=approver, cashier=cashier, pos_profile=pos_profile)
+	_mark_approval_notification_read(approver=approver, cashier=cashier_user, pos_profile=pos_profile)
 
 	if decision == "deny":
 		res = {"status": "denied", "message": "Your discount request was denied."}
@@ -514,6 +548,7 @@ def respond_to_approval(req_id: str, pin: str, decision: str) -> object:
 @frappe.whitelist(allow_guest=False)
 def poll_approval(req_id: str) -> object:
 	"""Cashier polls for approval result — fallback when Socket.IO is unavailable."""
+	require_pos_role()
 	cache = frappe.cache()
 	res = cache.get_value(_APPROVAL_RES_KEY.format(req_id=req_id))
 	if res:
@@ -527,6 +562,7 @@ def poll_approval(req_id: str) -> object:
 @frappe.whitelist(allow_guest=False)
 def get_pending_approvals() -> object:
 	"""Manager/Supervisor fetches their queue of pending approval requests."""
+	require_pos_role()
 	approver = frappe.session.user
 	cache = frappe.cache()
 	try:
@@ -603,10 +639,12 @@ def _clear_lockout(user: str, profile: str) -> None:
 
 def _increment_attempts(user: str, profile: str) -> int:
 	try:
-		key = _attempts_key(user, profile)
-		count = int(frappe.cache().get_value(key) or 0) + 1
-		frappe.cache().set_value(key, count, expires_in_sec=PIN_LOCKOUT_SECONDS * 2)
-		return count
+		cache = frappe.cache()
+		raw_key = cache.make_key(_attempts_key(user, profile))
+		# Atomic INCR — prevents race condition where concurrent wrong PINs both read count=0
+		count = cache.execute_command("INCR", raw_key)
+		cache.execute_command("EXPIRE", raw_key, PIN_LOCKOUT_SECONDS * 2)
+		return int(count)
 	except Exception:
 		frappe.logger().warning(f"Surge: Redis unavailable — attempt increment skipped for {user}@{profile}")
 		return 1
@@ -620,7 +658,13 @@ def _clear_attempts(user: str, profile: str) -> None:
 
 
 def _hash_pin(pin: str) -> str:
+	"""SHA256 of the raw PIN digits — matches what the client sends."""
 	return hashlib.sha256(pin.encode()).hexdigest()
+
+
+def _is_hashed(stored: str) -> bool:
+	"""True if the stored value is already a SHA256 hex digest (64 hex chars), not plaintext digits."""
+	return len(stored) == 64 and all(c in "0123456789abcdef" for c in stored)
 
 
 def _require_manager_on_profile(pos_profile: str) -> None:
@@ -630,7 +674,7 @@ def _require_manager_on_profile(pos_profile: str) -> None:
 
 	access = frappe.db.get_value(
 		"POS Profile User",
-		{"parent": pos_profile, "user": user},
+		{"parent": pos_profile, "user": user, "status": "Active"},
 		"access_level",
 	)
 	if access not in ("Manager",):
@@ -668,7 +712,8 @@ def verify_approval_token(token: str) -> dict | None:
 		if (now_datetime() - ts).total_seconds() > APPROVAL_TOKEN_TTL:
 			return None
 
-		# One-time use via Redis
+		# One-time use via Redis — fail-closed: if Redis is unavailable the token is rejected.
+		# Replay prevention is a security control; availability loss is preferable to replay attacks.
 		token_hash = hashlib.sha256(token.encode()).hexdigest()
 		redis_key = _TOKEN_KEY.format(token_hash=token_hash)
 		try:
@@ -676,8 +721,8 @@ def verify_approval_token(token: str) -> dict | None:
 				return None
 			frappe.cache().delete_value(redis_key)
 		except Exception:
-			# Redis unavailable — allow but log; prefer availability over strict replay prevention
-			frappe.logger().warning("Surge: Redis unavailable — approval token replay check skipped")
+			frappe.logger().error("Surge: Redis unavailable — approval token rejected (fail-closed)")
+			return None
 
 		return payload
 	except Exception:
@@ -685,15 +730,10 @@ def verify_approval_token(token: str) -> dict | None:
 
 
 def _get_hmac_secret() -> bytes:
-	try:
-		from frappe.utils.password import get_encryption_key
+	from frappe.utils.password import get_encryption_key
 
-		key = get_encryption_key()
-		return key.encode() if isinstance(key, str) else key
-	except Exception:
-		site = getattr(frappe.local, "site", "surge")
-		pwd = frappe.conf.get("db_password", "") or "surge-secret"
-		return hashlib.sha256(f"{site}:{pwd}".encode()).digest()
+	key = get_encryption_key()
+	return key.encode() if isinstance(key, str) else key
 
 
 def _mark_approval_notification_read(approver: str, cashier: str, pos_profile: str) -> None:

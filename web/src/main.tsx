@@ -7,7 +7,7 @@ import { LoginScreen } from "@/pages/LoginScreen";
 import { Loader2 } from "lucide-react";
 import { saveSession, loadSession, clearSession } from "@/lib/session";
 import { initRealtime, subscribeToSurgeEvents } from "@/lib/realtime";
-import type { Cashier, POSProfile } from "@/types/pos";
+import type { Cashier, POSProfile, Session } from "@/types/pos";
 import "./index.css";
 
 // Eagerly loaded above — shown immediately for guests, no Suspense flash.
@@ -15,6 +15,7 @@ import "./index.css";
 const ProfileSelector = lazy(() => import("@/pages/ProfileSelector").then(m => ({ default: m.ProfileSelector })));
 const CashierScreen   = lazy(() => import("@/pages/CashierScreen").then(m => ({ default: m.CashierScreen })));
 const SellScreen      = lazy(() => import("@/pages/SellScreen").then(m => ({ default: m.SellScreen })));
+const ShiftOpen       = lazy(() => import("@/pages/ShiftOpen").then(m => ({ default: m.ShiftOpen })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,7 +43,7 @@ function PageSpinner() {
 
 function SessionExpiredOverlay({ onDismiss }: { onDismiss: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 backdrop-blur-sm">
       <div className="mx-4 max-w-sm rounded-2xl border border-border bg-card p-6 text-center shadow-xl">
         <h2 className="mb-2 text-lg font-semibold">Session expired</h2>
         <p className="mb-4 text-sm text-muted-foreground">
@@ -68,6 +69,7 @@ function App() {
 
   const [profile, setProfile] = useState<POSProfile | null>(persisted?.profile ?? null);
   const [cashier, setCashier] = useState<Cashier | null>(persisted?.cashier ?? null);
+  const [posSession, setPosSession] = useState<Session | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
 
   // Must be before any early return — rules of hooks
@@ -81,17 +83,20 @@ function App() {
     saveSession(p, c);
     setProfile(p);
     setCashier(c);
+    setPosSession(null); // force ShiftOpen gate on new login
   }
 
   function handleLock() {
     clearSession();
     setCashier(null);
+    setPosSession(null);
   }
 
   function handleChangeProfile() {
     clearSession();
     setProfile(null);
     setCashier(null);
+    setPosSession(null);
   }
 
   if (isGuest) return <LoginScreen />;
@@ -110,16 +115,39 @@ function App() {
     );
   }
 
+  // ShiftOpen gate — check for active POS Opening Entry before selling
+  if (!posSession) {
+    return (
+      <ShiftOpenGate
+        profile={profile}
+        onSessionReady={setPosSession}
+      />
+    );
+  }
+
   return (
     <>
       {sessionExpired && <SessionExpiredOverlay onDismiss={() => setSessionExpired(false)} />}
       <SellScreen
         profile={profile}
         cashier={cashier}
+        posSession={posSession}
         onLock={handleLock}
         onChangeProfile={handleChangeProfile}
+        onShiftClosed={() => setPosSession(null)}
       />
     </>
+  );
+}
+
+// Separate component so ShiftOpen can call useSession internally without
+// violating hooks ordering in App (posSession may be null or truthy)
+function ShiftOpenGate({ profile, onSessionReady }: { profile: POSProfile; onSessionReady: (s: Session) => void }) {
+  return (
+    <ShiftOpen
+      profile={profile}
+      onSessionOpen={onSessionReady}
+    />
   );
 }
 

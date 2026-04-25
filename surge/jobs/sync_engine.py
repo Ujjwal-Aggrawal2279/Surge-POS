@@ -142,11 +142,11 @@ def flush_write_queue() -> None:
 
 @frappe.whitelist(allow_guest=False)
 def resolve_conflict(conflict_name: str, resolution: str) -> dict:
-	from surge.utils.permissions import require_manager_role
+	from surge.utils.permissions import require_surge_manager_role
 
 	# Force-submitting or voiding a conflicted invoice is a destructive action that
-	# bypasses stock validation — restrict to Manager/Administrator only.
-	require_manager_role()
+	# bypasses stock validation — restrict to Surge Managers only.
+	require_surge_manager_role()
 
 	valid_resolutions = {"Approved — Force Submit", "Rejected — Void"}
 	if resolution not in valid_resolutions:

@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
 import {
-  Search,
+  Search, LayoutGrid, List,
   Wine, Beer, Coffee, Milk, GlassWater,
   Cigarette, Cookie, Apple, Leaf, Wheat, Grape, Candy, Package,
   type LucideIcon,
@@ -8,6 +8,8 @@ import {
 import { useCartStore } from "@/stores/cart";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { Item, ItemPrice, StockEntry, Cashier } from "@/types/pos";
+
+const VIEW_KEY = "surge:item_view";
 
 const GROUP_ICON_MAP: Array<{
   keywords: string[];
@@ -48,9 +50,18 @@ interface Props {
 export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
   const [search, setSearch] = useState("");
   const [activeGroup, setActiveGroup] = useState("All");
+  const [view, setView] = useState<"grid" | "list">(
+    () => (localStorage.getItem(VIEW_KEY) as "grid" | "list") ?? "grid",
+  );
+
   const addItem = useCartStore((s) => s.addItem);
   const updateQty = useCartStore((s) => s.updateQty);
   const cartItems = useCartStore((s) => s.items);
+
+  const toggleView = useCallback((next: "grid" | "list") => {
+    localStorage.setItem(VIEW_KEY, next);
+    setView(next);
+  }, []);
 
   const categories = useMemo(() => {
     const groups = [...new Set(items.map((i) => i.item_group))].filter(Boolean).sort();
@@ -99,6 +110,7 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
   return (
     <div className="flex h-full flex-col gap-4">
 
+      {/* ── Header row ── */}
       <div className="flex shrink-0 items-center justify-between gap-4">
         <div>
           <p className="text-base font-bold text-[#212B36]">Welcome, {cashier.full_name}</p>
@@ -128,6 +140,37 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
               autoFocus
             />
           </div>
+
+          {/* ── View toggle ── */}
+          <div className="flex h-8.5 overflow-hidden rounded-[5px] border border-[#E6EAED] bg-white">
+            <button
+              type="button"
+              title="Grid view"
+              onClick={() => toggleView("grid")}
+              className={cn(
+                "flex w-8 items-center justify-center transition-colors",
+                view === "grid"
+                  ? "bg-[#FE9F43] text-white"
+                  : "text-[#A6AAAF] hover:text-[#FE9F43]",
+              )}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              title="List view"
+              onClick={() => toggleView("list")}
+              className={cn(
+                "flex w-8 items-center justify-center border-l border-[#E6EAED] transition-colors",
+                view === "list"
+                  ? "bg-[#FE9F43] text-white"
+                  : "text-[#A6AAAF] hover:text-[#FE9F43]",
+              )}
+            >
+              <List className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={() => setActiveGroup("All")}
@@ -138,6 +181,7 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
         </div>
       </div>
 
+      {/* ── Category tabs ── */}
       <div className="flex shrink-0 gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
         {categories.map((cat) => {
           const isAll = cat === "All";
@@ -170,101 +214,195 @@ export function ItemGrid({ items, prices, stock, warehouse, cashier }: Props) {
         })}
       </div>
 
-      <div className="grid auto-rows-max gap-2.75 overflow-y-auto pb-2 grid-cols-[repeat(auto-fill,minmax(160px,1fr))]">
-        {filtered.map((item) => {
-          const qty = stock.get(item.item_code) ?? 0;
-          const rate = prices.get(item.item_code) ?? 0;
-          const outOfStock = qty <= 0;
-          const inCart = cartMap.get(item.item_code) ?? 0;
+      {/* ── Grid view ── */}
+      {view === "grid" && (
+        <div className="grid auto-rows-max gap-2.75 overflow-y-auto pb-2 grid-cols-[repeat(auto-fill,minmax(160px,1fr))]">
+          {filtered.map((item) => {
+            const qty = stock.get(item.item_code) ?? 0;
+            const rate = prices.get(item.item_code) ?? 0;
+            const outOfStock = qty <= 0;
+            const inCart = cartMap.get(item.item_code) ?? 0;
+            const { Icon: GroupIcon, bg: groupBg, fg: groupFg } = getGroupStyle(item.item_group);
 
-          const { Icon: GroupIcon, bg: groupBg, fg: groupFg } = getGroupStyle(item.item_group);
-
-          return (
-            <div
-              key={item.item_code}
-              onClick={() => !outOfStock && handleAdd(item)}
-              className={cn(
-                "relative flex flex-col overflow-hidden rounded-[10px] bg-white transition-all",
-                "shadow-[0px_4px_60px_rgba(231,231,231,0.47)]",
-                outOfStock
-                  ? "cursor-not-allowed opacity-50 border border-[#E6EAED]"
-                  : inCart > 0
-                    ? "cursor-pointer border-2 border-[#FE9F43] hover:shadow-md active:scale-[0.98]"
-                    : "cursor-pointer border border-[#E6EAED] hover:border-[#FE9F43] hover:shadow-md active:scale-[0.98]",
-              )}
-            >
-              <div className={cn("relative h-29.25 overflow-hidden rounded-t-[10px]", groupBg)}>
-                {item.image ? (
-                  <img
-                    src={item.image}
-                    alt={item.item_name}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <GroupIcon className={cn("h-12 w-12", groupFg)} strokeWidth={1.25} />
-                  </div>
+            return (
+              <div
+                key={item.item_code}
+                onClick={() => !outOfStock && handleAdd(item)}
+                className={cn(
+                  "relative flex flex-col overflow-hidden rounded-[10px] bg-white transition-all",
+                  "shadow-[0px_4px_60px_rgba(231,231,231,0.47)]",
+                  outOfStock
+                    ? "cursor-not-allowed opacity-50 border border-[#E6EAED]"
+                    : inCart > 0
+                      ? "cursor-pointer border-2 border-[#FE9F43] hover:shadow-md active:scale-[0.98]"
+                      : "cursor-pointer border border-[#E6EAED] hover:border-[#FE9F43] hover:shadow-md active:scale-[0.98]",
                 )}
-
-                {inCart > 0 && (
-                  <span className="absolute left-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#6938EF] px-1.5 text-[10px] font-bold text-white">
-                    {inCart}
-                  </span>
-                )}
-
-                {!outOfStock && (
-                  inCart > 0 ? (
-                    <button
-                      type="button"
-                      title={`Remove one ${item.item_name} from cart`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        updateQty(item.item_code, inCart - 1);
-                      }}
-                      className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-all hover:bg-red-600 active:scale-95"
-                    >
-                      <svg width="8" height="2" viewBox="0 0 10 2" fill="none" aria-hidden="true">
-                        <path d="M1 1h8" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-                      </svg>
-                    </button>
+              >
+                <div className={cn("relative h-29.25 overflow-hidden rounded-t-[10px]", groupBg)}>
+                  {item.image ? (
+                    <img
+                      src={item.image}
+                      alt={item.item_name}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
                   ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <GroupIcon className={cn("h-12 w-12", groupFg)} strokeWidth={1.25} />
+                    </div>
+                  )}
+
+                  {inCart > 0 && (
+                    <span className="absolute left-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#6938EF] px-1.5 text-[10px] font-bold text-white">
+                      {inCart}
+                    </span>
+                  )}
+
+                  {!outOfStock && (
+                    inCart > 0 ? (
+                      <button
+                        type="button"
+                        title={`Remove one ${item.item_name} from cart`}
+                        onClick={(e) => { e.stopPropagation(); updateQty(item.item_code, inCart - 1); }}
+                        className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white shadow-md transition-all hover:bg-red-600 active:scale-95"
+                      >
+                        <svg width="8" height="2" viewBox="0 0 10 2" fill="none" aria-hidden="true">
+                          <path d="M1 1h8" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        title={`Add ${item.item_name} to cart`}
+                        onClick={(e) => { e.stopPropagation(); handleAdd(item); }}
+                        className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[#3EB780] text-white shadow-md transition-all hover:bg-[#32a36d] active:scale-95"
+                      >
+                        <svg width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                          <path d="M5 1v8M1 5h8" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <div className="flex h-18.5 flex-col justify-center gap-1 px-4 py-3">
+                  <p className="truncate text-sm font-bold leading-5.25 text-[#212B36]">
+                    {item.item_name}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-[#0E9384]">{formatCurrency(rate)}</span>
+                    <span className="text-sm text-[#DD2590]">
+                      {outOfStock ? "Out" : `${qty} Pcs`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {filtered.length === 0 && (
+            <p className="col-span-full py-16 text-center text-sm text-[#646B72]">No items found</p>
+          )}
+        </div>
+      )}
+
+      {/* ── List view ── */}
+      {view === "list" && (
+        <div className="flex flex-col gap-1.5 overflow-y-auto pb-2">
+          {filtered.map((item) => {
+            const qty = stock.get(item.item_code) ?? 0;
+            const rate = prices.get(item.item_code) ?? 0;
+            const outOfStock = qty <= 0;
+            const inCart = cartMap.get(item.item_code) ?? 0;
+            const { Icon: GroupIcon, bg: groupBg, fg: groupFg } = getGroupStyle(item.item_group);
+
+            return (
+              <div
+                key={item.item_code}
+                onClick={() => !outOfStock && handleAdd(item)}
+                className={cn(
+                  "flex items-center gap-3 rounded-[10px] bg-white px-3 py-2.5 transition-all",
+                  "shadow-[0px_4px_60px_rgba(231,231,231,0.47)]",
+                  outOfStock
+                    ? "cursor-not-allowed opacity-50 border border-[#E6EAED]"
+                    : inCart > 0
+                      ? "cursor-pointer border-2 border-[#FE9F43] hover:shadow-md active:scale-[0.995]"
+                      : "cursor-pointer border border-[#E6EAED] hover:border-[#FE9F43] hover:shadow-md active:scale-[0.995]",
+                )}
+              >
+                {/* Thumbnail */}
+                <div className={cn("relative h-10 w-10 shrink-0 overflow-hidden rounded-lg", groupBg)}>
+                  {item.image ? (
+                    <img
+                      src={item.image}
+                      alt={item.item_name}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <GroupIcon className={cn("h-5 w-5", groupFg)} strokeWidth={1.25} />
+                    </div>
+                  )}
+                  {inCart > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#6938EF] px-1 text-[9px] font-bold text-white">
+                      {inCart}
+                    </span>
+                  )}
+                </div>
+
+                {/* Name */}
+                <p className="flex-1 truncate text-sm font-semibold text-[#212B36]">
+                  {item.item_name}
+                </p>
+
+                {/* Price */}
+                <span className="shrink-0 text-sm font-bold text-[#0E9384]">
+                  {formatCurrency(rate)}
+                </span>
+
+                {/* Stock */}
+                <span className={cn("shrink-0 w-14 text-right text-xs font-medium",
+                  outOfStock ? "text-[#DD2590]" : "text-[#646B72]")}>
+                  {outOfStock ? "Out of stock" : `${qty} pcs`}
+                </span>
+
+                {/* Add / Remove */}
+                {!outOfStock && (
+                  <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    {inCart > 0 && (
+                      <button
+                        type="button"
+                        title="Remove one"
+                        onClick={() => updateQty(item.item_code, inCart - 1)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-white shadow-sm transition-all hover:bg-red-600 active:scale-95"
+                      >
+                        <svg width="8" height="2" viewBox="0 0 10 2" fill="none" aria-hidden="true">
+                          <path d="M1 1h8" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+                        </svg>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      title={`Add ${item.item_name} to cart`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAdd(item);
-                      }}
-                      className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[#3EB780] text-white shadow-md transition-all hover:bg-[#32a36d] active:scale-95"
+                      title="Add to cart"
+                      onClick={() => handleAdd(item)}
+                      className="flex h-7 w-7 items-center justify-center rounded-full bg-[#3EB780] text-white shadow-sm transition-all hover:bg-[#32a36d] active:scale-95"
                     >
                       <svg width="8" height="8" viewBox="0 0 10 10" fill="none" aria-hidden="true">
                         <path d="M5 1v8M1 5h8" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
                       </svg>
                     </button>
-                  )
+                  </div>
                 )}
               </div>
+            );
+          })}
 
-              <div className="flex h-18.5 flex-col justify-center gap-1 px-4 py-3">
-                <p className="truncate text-sm font-bold leading-5.25 text-[#212B36]">
-                  {item.item_name}
-                </p>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-[#0E9384]">{formatCurrency(rate)}</span>
-                  <span className="text-sm text-[#DD2590]">
-                    {outOfStock ? "Out" : `${qty} Pcs`}
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {filtered.length === 0 && (
-          <p className="col-span-full py-16 text-center text-sm text-[#646B72]">No items found</p>
-        )}
-      </div>
+          {filtered.length === 0 && (
+            <p className="py-16 text-center text-sm text-[#646B72]">No items found</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

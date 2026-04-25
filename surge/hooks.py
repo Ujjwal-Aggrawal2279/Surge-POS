@@ -13,6 +13,7 @@ required_apps = ["frappe", "erpnext"]
 # ---------------------------------------------------------------------------
 
 after_install = "surge.setup.install.after_install"
+after_migrate = "surge.setup.install.after_install"
 before_uninstall = "surge.setup.uninstall.before_uninstall"
 
 # ---------------------------------------------------------------------------
@@ -49,11 +50,11 @@ doc_events = {
 		"on_update": "surge.utils.cache_hooks.on_item_price_update",
 		"after_insert": "surge.utils.cache_hooks.on_item_price_update",
 	},
-	"POS Invoice": {
-		# on_submit: safe — india_compliance does not register this event
-		"on_submit": "surge.overrides.pos_invoice.on_submit",
-		# before_cancel: require void_reason before ERPNext processes cancellation
-		"before_cancel": "surge.overrides.pos_invoice.before_cancel",
+	# Surge creates Sales Invoices (is_pos=1, update_stock=1) for real-time stock
+	# and per-transaction IRN generation. india_compliance fires on Sales Invoice submit.
+	"Sales Invoice": {
+		"on_submit": "surge.overrides.sales_invoice.on_submit",
+		"before_cancel": "surge.overrides.sales_invoice.before_cancel",
 	},
 }
 

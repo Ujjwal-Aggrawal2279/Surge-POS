@@ -1,9 +1,11 @@
 import frappe
 import msgspec
-from frappe.utils import now_datetime, nowdate
+from frappe.utils import now_datetime
 
+from surge.api.auth import verify_approval_token
 from surge.jobs.queue import enqueue_invoice
 from surge.utils.json import surge_response
+from surge.utils.permissions import require_pos_profile_access, require_warehouse_access
 
 
 class InvoiceItem(msgspec.Struct, gc=False):
@@ -34,8 +36,6 @@ _decoder = msgspec.json.Decoder(CreateInvoiceRequest)
 
 @frappe.whitelist(allow_guest=False)
 def create_invoice():
-	from surge.utils.permissions import require_pos_profile_access
-
 	raw = frappe.request.data
 	try:
 		req = _decoder.decode(raw)
@@ -60,6 +60,9 @@ def create_invoice():
 				"grand_total_paise": grand_total_paise,
 			}
 		)
+	except (frappe.ValidationError, frappe.PermissionError, frappe.AuthenticationError):
+		# Business-rule failures must surface as errors — never silently enqueue
+		raise
 	except Exception:
 		enqueue_invoice(req)
 		return surge_response(
@@ -73,20 +76,54 @@ def create_invoice():
 
 
 def _submit_invoice(req: CreateInvoiceRequest) -> str:
+	# Idempotency guard — scoped to the submitting user so Cashier B cannot claim
+	# Cashier A's invoice by reusing the same client_request_id.
+	existing = frappe.db.get_value(
+		"Sales Invoice",
+		{"surge_client_req_id": req.client_request_id, "owner": frappe.session.user},
+		"name",
+	)
+	if existing:
+		return existing
+
 	pos_profile = frappe.get_cached_doc("POS Profile", req.pos_profile)
 
-	invoice = frappe.new_doc("POS Invoice")
-	invoice.posting_date = nowdate()
-	invoice.posting_time = str(now_datetime().time())
+	# Validate payment modes against profile — prevent ghost/invalid modes
+	allowed_modes = {p.mode_of_payment for p in pos_profile.payments}
+	for payment in req.payments:
+		if payment.mode_of_payment not in allowed_modes:
+			frappe.throw(
+				f"Payment mode '{payment.mode_of_payment}' is not configured on this POS Profile.",
+				frappe.ValidationError,
+			)
+
+	# Capture timestamp once — prevents posting_date and posting_time straddling midnight
+	now = now_datetime()
+
+	invoice = frappe.new_doc("Sales Invoice")
+	invoice.is_pos = 1
+	invoice.update_stock = 1
+	invoice.posting_date = now.date()
+	invoice.posting_time = str(now.time())
 	invoice.pos_profile = req.pos_profile
 	invoice.customer = req.customer
 	invoice.company = pos_profile.company
 	invoice.currency = pos_profile.currency
 	invoice.selling_price_list = pos_profile.selling_price_list
-	invoice.set_warehouse = pos_profile.warehouse
 	invoice.surge_client_req_id = req.client_request_id
 
 	for item in req.items:
+		if item.qty <= 0:
+			frappe.throw(f"Item '{item.item_code}': qty must be greater than zero.", frappe.ValidationError)
+		if item.rate_paise < 0:
+			frappe.throw(f"Item '{item.item_code}': rate cannot be negative.", frappe.ValidationError)
+		if item.discount_paise < 0:
+			frappe.throw(f"Item '{item.item_code}': discount cannot be negative.", frappe.ValidationError)
+		if item.discount_paise > item.rate_paise:
+			frappe.throw(f"Item '{item.item_code}': discount exceeds rate.", frappe.ValidationError)
+		# Validate warehouse is accessible to this user — prevents cross-terminal stock manipulation
+		effective_warehouse = item.warehouse or pos_profile.warehouse
+		require_warehouse_access(effective_warehouse)
 		invoice.append(
 			"items",
 			{
@@ -94,7 +131,7 @@ def _submit_invoice(req: CreateInvoiceRequest) -> str:
 				"qty": item.qty,
 				"rate": item.rate_paise / 100.0,
 				"discount_amount": item.discount_paise / 100.0,
-				"warehouse": item.warehouse or pos_profile.warehouse,
+				"warehouse": effective_warehouse,
 			},
 		)
 
@@ -107,13 +144,18 @@ def _submit_invoice(req: CreateInvoiceRequest) -> str:
 			},
 		)
 
-	invoice.set_missing_values()
-	invoice.calculate_taxes_and_totals()
-	# ignore_permissions: access already enforced upstream via require_pos_profile_access().
-	# POS users intentionally lack direct DocType-level Create on POS Invoice — they
-	# transact only through Surge POS, not ERPNext Desk.
-	invoice.insert(ignore_permissions=True)
-	invoice.submit()
+	# POS users lack broad DocType permissions by design — they transact only through
+	# Surge POS. ignore_permissions covers set_missing_values() (which checks Customer
+	# read) and insert/submit. Access is enforced upstream by require_pos_profile_access().
+	prev = frappe.flags.ignore_permissions
+	frappe.flags.ignore_permissions = True
+	try:
+		invoice.set_missing_values()
+		invoice.calculate_taxes_and_totals()
+		invoice.insert(ignore_permissions=True)
+		invoice.submit()
+	finally:
+		frappe.flags.ignore_permissions = prev
 
 	return invoice.name
 
@@ -123,8 +165,6 @@ def _check_discount_limits(req: CreateInvoiceRequest) -> dict | None:
 	Returns the approval payload if a valid token was consumed, None if no discount
 	exceeded the limit. Raises ValidationError if discount exceeds limit with no valid token.
 	"""
-	from surge.api.auth import verify_approval_token
-
 	if not req.items:
 		return None
 
@@ -177,7 +217,7 @@ def _check_discount_limits(req: CreateInvoiceRequest) -> dict | None:
 
 def _stamp_override(invoice_name: str, payload: dict) -> None:
 	frappe.db.set_value(
-		"POS Invoice",
+		"Sales Invoice",
 		invoice_name,
 		{
 			"override_approved_by": payload.get("approver"),

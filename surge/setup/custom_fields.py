@@ -69,13 +69,14 @@ SURGE_CUSTOM_FIELDS: dict = {
 			"insert_after": "discount_limit_supervisor",
 		},
 	],
-	"POS Invoice": [
+	"Sales Invoice": [
 		{
 			"fieldname": "surge_client_req_id",
 			"fieldtype": "Data",
 			"label": "Surge Client Request ID",
 			"read_only": 1,
 			"no_copy": 1,
+			"unique": 1,
 			"insert_after": "amended_from",
 		},
 		{
@@ -115,15 +116,5 @@ SURGE_CUSTOM_FIELDS: dict = {
 			"permlevel": 1,
 			"insert_after": "override_reason",
 		},
-	],
-	"Sales Invoice": [
-		{
-			"fieldname": "surge_client_req_id",
-			"fieldtype": "Data",
-			"label": "Surge Client Request ID",
-			"read_only": 1,
-			"no_copy": 1,
-			"insert_after": "amended_from",
-		}
 	],
 }

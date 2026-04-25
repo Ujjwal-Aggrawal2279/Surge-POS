@@ -22,7 +22,8 @@ def enqueue_invoice(req) -> None:
 		# POS users have no direct DocType permission on it by design.
 		doc.insert(ignore_permissions=True)
 		frappe.db.commit()
-	except frappe.DuplicateEntryError:
+	except (frappe.DuplicateEntryError, frappe.UniqueValidationError):
+		# Already queued — client retried after a network drop; safe to ignore.
 		frappe.db.rollback()
 	except Exception:
 		frappe.db.rollback()

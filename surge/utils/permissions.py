@@ -23,31 +23,25 @@ def require_pos_role() -> None:
 
 def require_pos_profile_access(profile: str) -> None:
 	"""
-	User must have POS role AND be listed in the POS Profile's
-	applicable users (or the profile has no user restrictions).
+	User must have POS role AND be Active on the POS Profile (if it has user restrictions).
+	Profiles with zero users listed are open to all POS role holders.
 	"""
 	require_pos_role()
 
 	if frappe.session.user in ("Administrator",):
 		return
 
-	# Check if profile restricts access to specific users
-	allowed_users = frappe.db.sql(
-		"""
-        SELECT u.user
-        FROM `tabPOS Profile User` u
-        WHERE u.parent = %s AND u.default = 1
-        """,
-		(profile,),
-		as_list=True,
+	# First: does this profile restrict access to specific users at all?
+	has_any_users = frappe.db.count("POS Profile User", {"parent": profile})
+	if not has_any_users:
+		return  # Open profile — all POS role holders allowed
+
+	# Profile has user restrictions — caller must be Active
+	is_active = frappe.db.exists(
+		"POS Profile User",
+		{"parent": profile, "user": frappe.session.user, "status": "Active"},
 	)
-
-	# If no users listed → open to all POS role holders
-	if not allowed_users:
-		return
-
-	flat = [row[0] for row in allowed_users]
-	if frappe.session.user not in flat:
+	if not is_active:
 		frappe.throw(
 			f"You do not have access to POS Profile '{profile}'",
 			frappe.PermissionError,
@@ -62,6 +56,27 @@ def require_manager_role() -> None:
 	if not user_roles & MANAGER_ROLES:
 		frappe.throw(
 			"This action requires Manager access",
+			frappe.PermissionError,
+		)
+
+
+def require_surge_manager_role() -> None:
+	"""User must have Manager access level on at least one active POS Profile.
+	Use this instead of require_manager_role() for Surge POS operations — Surge
+	Managers are defined in POS Profile User, not in Frappe system roles."""
+	require_pos_role()
+	if frappe.session.user in ("Administrator",):
+		return
+	user_roles = set(frappe.get_roles(frappe.session.user))
+	if "System Manager" in user_roles:
+		return  # System Manager has full access to all Surge manager operations
+	is_manager = frappe.db.exists(
+		"POS Profile User",
+		{"user": frappe.session.user, "access_level": "Manager", "status": "Active"},
+	)
+	if not is_manager:
+		frappe.throw(
+			"This action requires Surge Manager access",
 			frappe.PermissionError,
 		)
 
@@ -90,7 +105,7 @@ def require_warehouse_access(warehouse: str) -> None:
               )
               OR EXISTS (
                   SELECT 1 FROM `tabPOS Profile User` pu
-                  WHERE pu.parent = p.name AND pu.user = %(user)s
+                  WHERE pu.parent = p.name AND pu.user = %(user)s AND pu.status = 'Active'
               )
           )
         LIMIT 1
