@@ -38,6 +38,7 @@ from surge.api.auth import (
 	set_pin,
 	verify_pin,
 )
+from surge.tests.integration._base import ensure_master_data
 
 # ── Fixture helpers ───────────────────────────────────────────────────────────
 
@@ -93,6 +94,7 @@ class AuthTestBase(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		ensure_master_data()
 		# Ensure users exist
 		_ensure_user(_CASHIER)
 		_ensure_user(_SUPERVISOR)

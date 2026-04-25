@@ -40,6 +40,7 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import get_date_str, now_datetime, nowdate
 
 from surge.api.session import _build_z_report, close_session, get_active_session, open_session
+from surge.tests.integration._base import ensure_master_data
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ def _ensure_user(email, role="POS User"):
 
 
 def _create_test_profile(modes=None):
+	ensure_master_data()
 	if frappe.db.exists("POS Profile", _PROFILE):
 		return
 	modes = modes or ["Cash", "UPI"]

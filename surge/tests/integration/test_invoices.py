@@ -43,6 +43,7 @@ from surge.api.invoices import (
 	_submit_invoice,
 )
 from surge.jobs.queue import enqueue_invoice
+from surge.tests.integration._base import ensure_master_data
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ def _ensure_user(email, role="POS User"):
 
 
 def _setup_fixtures():
+	ensure_master_data()
 	company = frappe.db.get_single_value("Global Defaults", "default_company")
 	wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
 	avail_modes = frappe.get_all("Mode of Payment", pluck="name")

@@ -22,6 +22,7 @@ from frappe.tests.utils import FrappeTestCase
 from frappe.utils import now_datetime, nowdate
 
 from surge.api.session import _build_z_report
+from surge.tests.integration._base import ensure_master_data
 
 _PROFILE = "_ZReportProfile"
 
@@ -102,6 +103,7 @@ class ZReportBase(FrappeTestCase):
 	@classmethod
 	def setUpClass(cls):
 		super().setUpClass()
+		ensure_master_data()
 		if not frappe.db.exists("POS Profile", _PROFILE):
 			company = _get_company()
 			wh = frappe.db.get_value("Warehouse", {"is_group": 0, "company": company}, "name")
