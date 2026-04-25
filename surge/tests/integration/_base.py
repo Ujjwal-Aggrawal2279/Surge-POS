@@ -41,10 +41,11 @@ def ensure_master_data():
 
 def _ensure_warehouse_types():
 	# ERPNext create_default_warehouses() sets warehouse_type="Transit" on the
-	# "Goods In Transit" warehouse. Fresh sites have no Warehouse Type records.
+	# "Goods In Transit" warehouse. Warehouse Type uses autoname=Prompt so name
+	# must be set explicitly. Fresh sites have no Warehouse Type records.
 	if not frappe.db.exists("Warehouse Type", "Transit"):
 		wt = frappe.new_doc("Warehouse Type")
-		wt.warehouse_type = "Transit"
+		wt.name = "Transit"
 		wt.insert(ignore_permissions=True)
 
 
