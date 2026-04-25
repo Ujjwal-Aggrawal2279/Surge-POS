@@ -44,7 +44,7 @@
    "fieldname": "invoice",
    "fieldtype": "Link",
    "label": "Invoice",
-   "options": "POS Invoice"
+   "options": "Sales Invoice"
   },
   {
    "fieldname": "approver",

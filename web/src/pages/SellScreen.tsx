@@ -1,19 +1,20 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { useItems, useItemPrices, useStock } from "@/hooks/useItems";
 import { ItemGrid, buildPriceMap, buildStockMap } from "@/components/pos/ItemGrid";
 import { Cart } from "@/components/pos/Cart";
 import { PaymentDialog } from "@/components/pos/PaymentDialog";
+import { ShiftClose } from "@/pages/ShiftClose";
 import { useCartStore } from "@/stores/cart";
 import { useIdleLock } from "@/hooks/useIdleLock";
 import { useSyncQueue } from "@/hooks/useSyncQueue";
 import { config, post } from "@/lib/api";
 import { clearSession } from "@/lib/session";
 import { formatCurrency } from "@/lib/utils";
-import { Loader2, Lock, Monitor, ShoppingCart, LogOut, Clock, WifiOff } from "lucide-react";
+import { Loader2, Lock, Monitor, ShoppingCart, LogOut, Clock, WifiOff, DoorOpen } from "lucide-react";
 import { ApprovalQueue } from "@/components/pos/ApprovalQueue";
 import { SyncStatusBadge } from "@/components/pos/SyncStatusBadge";
 import { ConflictPanel } from "@/components/pos/ConflictPanel";
-import type { Cashier, POSProfile } from "@/types/pos";
+import type { Cashier, POSProfile, Session, SessionBalance, ZReport } from "@/types/pos";
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 const IDLE_WARN_MS    = 15 * 1000;      // warn 15s before
@@ -21,11 +22,13 @@ const IDLE_WARN_MS    = 15 * 1000;      // warn 15s before
 interface Props {
   profile: POSProfile;
   cashier: Cashier;
+  posSession: Session;
   onLock: () => void;
   onChangeProfile: () => void;
+  onShiftClosed: () => void;
 }
 
-export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props) {
+export function SellScreen({ profile, cashier, posSession, onLock, onChangeProfile, onShiftClosed }: Props) {
   const cfg = config();
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentMode, setPaymentMode] = useState(() => profile.payment_modes?.[0] ?? "Cash");
@@ -34,20 +37,38 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [shiftCloseOpen, setShiftCloseOpen] = useState(false);
 
   const { pendingCount, isSyncing, circuitOpen, setCircuitOpen } = useSyncQueue();
+
+  const doCloseSession = useCallback(
+    async (openingEntry: string, balances: SessionBalance[], reason?: string): Promise<ZReport> => {
+      const data = await post<{ z_report: ZReport }>("surge.api.session.close_session", {
+        opening_entry: openingEntry,
+        closing_balances: balances,
+        discrepancy_reason: reason ?? "",
+      });
+      return data.z_report;
+    },
+    [], // stable — only depends on module-level `post`
+  );
 
   const { isWarning: idleWarning, secondsLeft, dismissWarning } = useIdleLock(
     IDLE_TIMEOUT_MS,
     onLock,
-    { warnBeforeMs: IDLE_WARN_MS, disabled: paymentOpen || logoutConfirmOpen },
+    { warnBeforeMs: IDLE_WARN_MS, disabled: paymentOpen || logoutConfirmOpen || shiftCloseOpen },
   );
 
-  function handleCheckout(mode: string, token?: string) {
+  const handleCheckout = useCallback((mode: string, token?: string) => {
     setPaymentMode(mode);
     setApprovalToken(token);
     setPaymentOpen(true);
-  }
+  }, []);
+
+  const handleMobileCheckout = useCallback((mode: string, token?: string) => {
+    setMobileCartOpen(false);
+    handleCheckout(mode, token);
+  }, [handleCheckout]);
 
   async function confirmLogout() {
     setLoggingOut(true);
@@ -127,6 +148,19 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
           {/* Conflict panel — Managers only */}
           {cashier.access_level === "Manager" && (
             <ConflictPanel />
+          )}
+
+          {/* Close Shift — Managers only */}
+          {cashier.access_level === "Manager" && (
+            <button
+              type="button"
+              onClick={() => setShiftCloseOpen(true)}
+              className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-muted-foreground hover:border-amber-400/60 hover:text-amber-700"
+              title="Close shift and view Z-report"
+            >
+              <DoorOpen className="h-3 w-3" />
+              <span className="hidden sm:inline">Close Shift</span>
+            </button>
           )}
 
           {/* Switch to Desk — only for desk users */}
@@ -256,7 +290,7 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
           />
           <div className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl bg-background shadow-2xl">
             <Cart
-              onCheckout={(mode, token) => { setMobileCartOpen(false); handleCheckout(mode, token); }}
+              onCheckout={handleMobileCheckout}
               cashier={cashier}
               posProfile={profile}
               onClose={() => setMobileCartOpen(false)}
@@ -265,18 +299,34 @@ export function SellScreen({ profile, cashier, onLock, onChangeProfile }: Props)
         </div>
       )}
 
-      <PaymentDialog
-        open={paymentOpen}
-        onClose={() => setPaymentOpen(false)}
-        posProfile={profile.name}
-        paymentModes={profile.payment_modes}
-        defaultMode={paymentMode}
-        approvalToken={approvalToken}
-      />
+      {/* Unmount PaymentDialog entirely while shift is closing — prevents concurrent payment + close */}
+      {!shiftCloseOpen && (
+        <PaymentDialog
+          open={paymentOpen}
+          onClose={() => setPaymentOpen(false)}
+          posProfile={profile.name}
+          paymentModes={profile.payment_modes}
+          defaultMode={paymentMode}
+          approvalToken={approvalToken}
+        />
+      )}
+
+      {/* ── Shift close overlay (Manager only) ────────────────────── */}
+      {shiftCloseOpen && (
+        <div className="fixed inset-0 z-50">
+          <ShiftClose
+            profile={profile}
+            openingEntry={posSession.name}
+            closeSession={doCloseSession}
+            onClose={() => { setShiftCloseOpen(false); onShiftClosed(); }}
+            onCancel={() => setShiftCloseOpen(false)}
+          />
+        </div>
+      )}
 
       {/* ── Logout confirmation modal ──────────────────────────────── */}
       {logoutConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="fixed inset-0 z-55 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-2xl border border-border bg-background p-6 shadow-2xl">
             <div className="mb-1 flex items-center gap-2">
               <LogOut className="h-4 w-4 text-red-500" />

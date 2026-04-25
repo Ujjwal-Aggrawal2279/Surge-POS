@@ -65,9 +65,9 @@ def get_failed_items(offset: int = 0, limit: int = 50):
 
 @frappe.whitelist(allow_guest=False)
 def get_conflicts():
-	from surge.utils.permissions import require_manager_role
+	from surge.utils.permissions import require_surge_manager_role
 
-	require_manager_role()
+	require_surge_manager_role()
 
 	conflicts = frappe.get_all(
 		"Surge Sync Conflict",

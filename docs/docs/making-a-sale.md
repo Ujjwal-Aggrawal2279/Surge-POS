@@ -24,6 +24,17 @@ sidebar_position: 7
 - **+** / **−** buttons on the cart row.
 - Setting qty to 0 removes the line.
 
+## Grid vs List view
+
+The toggle in the top-right of the product area (next to the search box) switches between two layouts:
+
+| View | Best for |
+|---|---|
+| **Grid** (default) | Browsing by image/icon — quick visual recognition |
+| **List** | High-SKU screens or scanning by name — more items visible at once |
+
+Your choice persists across page refreshes and sessions (stored locally in the browser). Switch back at any time with the same toggle.
+
 ## Filters
 
 Category tabs filter the item grid. **View All Categories** resets to show everything.

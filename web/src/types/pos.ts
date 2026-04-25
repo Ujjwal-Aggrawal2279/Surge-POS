@@ -106,3 +106,38 @@ export interface POSProfile {
   discount_limit_supervisor: number;
   discount_limit_manager: number;
 }
+
+export interface Session {
+  name: string;
+  period_start_date: string;
+  user: string;
+}
+
+export interface SessionBalance {
+  mode_of_payment: string;
+  amount: number;
+}
+
+export interface ZReportMode {
+  mode_of_payment: string;
+  opening_amount_paise: number;
+  sales_amount_paise: number;
+  expected_amount_paise: number;
+  actual_amount_paise: number;
+  discrepancy_paise: number;
+}
+
+export interface ZReport {
+  opening_entry: string;
+  pos_profile: string;
+  period_start: string;
+  period_end: string;
+  cashier: string;
+  total_invoices: number;
+  total_returns: number;
+  net_sales_paise: number;
+  net_returns_paise: number;
+  total_tax_paise: number;
+  payment_modes: ZReportMode[];
+  discrepancy_reason: string;
+}

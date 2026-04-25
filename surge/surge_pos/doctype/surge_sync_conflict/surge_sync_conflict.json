@@ -59,7 +59,7 @@
    "fieldname": "resulting_invoice",
    "fieldtype": "Link",
    "label": "Resulting Invoice",
-   "options": "POS Invoice"
+   "options": "Sales Invoice"
   }
  ],
  "permissions": [

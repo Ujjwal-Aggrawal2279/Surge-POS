@@ -51,7 +51,16 @@ coverage/
 .nyc_output/
 htmlcov/
 .coverage
+coverage-*.xml
 .pytest_cache/
+
+# Generated test files (rebuilt by CI on every run)
+surge/tests/generated/
+
+# Playwright
+web/e2e/test-results/
+web/e2e/.playwright-cache/
+playwright-report/
 
 # Misc
 *.log

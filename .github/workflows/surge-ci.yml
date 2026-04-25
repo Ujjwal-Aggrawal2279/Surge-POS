@@ -1,0 +1,299 @@
+name: Surge POS CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: surge-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Job 1: Fast Checks (~90s) ─────────────────────────────────────────────────
+# Linting, type checking, frontend build. Blocks everything else on failure.
+jobs:
+  fast-checks:
+    name: "Fast Checks (ruff · tsc · build)"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Python syntax check (all API + utils files)
+        run: |
+          python -m py_compile \
+            surge/api/auth.py \
+            surge/api/invoices.py \
+            surge/api/session.py \
+            surge/api/items.py \
+            surge/api/stock.py \
+            surge/api/customers.py \
+            surge/api/sync.py \
+            surge/utils/permissions.py \
+            surge/overrides/sales_invoice.py \
+            surge/jobs/queue.py
+        working-directory: apps/surge
+
+      - name: Ruff lint
+        run: ruff check surge/ --output-format=github
+        working-directory: apps/surge
+
+      - name: Ruff format check
+        run: ruff format surge/ --check
+        working-directory: apps/surge
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: apps/surge/web/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: apps/surge/web
+
+      - name: TypeScript type check
+        run: pnpm typecheck
+        working-directory: apps/surge/web
+
+      - name: Frontend build (bundle integrity)
+        run: pnpm build
+        working-directory: apps/surge/web
+
+# ── Job 2: AST Scan + Generate + Unit Tests ───────────────────────────────────
+  scan-and-unit:
+    name: "AST Scan + Unit Tests (Hypothesis)"
+    runs-on: ubuntu-22.04
+    needs: fast-checks
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install test dependencies
+        run: pip install pytest hypothesis pytest-cov msgspec
+
+      - name: "Step 2a — AST scan: discover all @whitelist endpoints"
+        run: |
+          python scripts/generate_tests.py
+          echo "--- Generated manifest ---"
+          cat surge/tests/generated/manifest.json | python3 -m json.tool --no-ensure-ascii
+        working-directory: apps/surge
+
+      - name: "Step 2b — Coverage gate: every endpoint must have validation or a guard"
+        run: python scripts/generate_tests.py --check-coverage
+        working-directory: apps/surge
+        # Exits 1 if any @whitelist fn has no frappe.throw AND no require_*
+
+      - name: "Step 2c — Unit tests (Hypothesis, no DB required)"
+        run: |
+          pytest surge/tests/unit/ \
+            -v \
+            --tb=short \
+            -m unit \
+            --hypothesis-seed=0 \
+            --cov=surge/api \
+            --cov=surge/utils \
+            --cov-report=xml:coverage-unit.xml \
+            --cov-report=term-missing
+        working-directory: apps/surge
+
+      - name: Upload unit coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-unit
+          path: apps/surge/coverage-unit.xml
+
+# ── Job 3: Integration Tests (Frappe + MariaDB + Redis) ──────────────────────
+  integration:
+    name: "Integration Tests (Groups A–G)"
+    runs-on: ubuntu-22.04
+    needs: fast-checks
+
+    services:
+      mariadb:
+        image: mariadb:10.6
+        env:
+          MARIADB_ROOT_PASSWORD: frappe
+          MARIADB_DATABASE: _test_frappe
+          MARIADB_USER: frappe
+          MARIADB_PASSWORD: frappe
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+        ports:
+          - 3306:3306
+
+      redis-cache:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+      redis-queue:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y mariadb-client wkhtmltopdf libssl-dev
+
+      - name: Install frappe-bench
+        run: pip install frappe-bench
+
+      - name: Cache bench pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: bench-pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: bench-pip-${{ runner.os }}-
+
+      - name: Initialize frappe bench
+        run: |
+          bench init \
+            --skip-redis-config-generation \
+            --frappe-branch version-15 \
+            frappe-bench
+        env:
+          CI: true
+
+      - name: Get ERPNext and Surge
+        run: |
+          cd frappe-bench
+          bench get-app erpnext --branch version-15
+          bench get-app surge ${{ github.workspace }}/apps/surge
+
+      - name: Configure Redis (skip socket, use TCP)
+        run: |
+          cd frappe-bench
+          cat > sites/common_site_config.json << 'EOF'
+          {
+            "db_host": "127.0.0.1",
+            "db_port": 3306,
+            "redis_cache": "redis://localhost:6379",
+            "redis_queue": "redis://localhost:6380",
+            "redis_socketio": "redis://localhost:6379",
+            "socketio_port": 9000
+          }
+          EOF
+
+      - name: Create test site
+        run: |
+          cd frappe-bench
+          bench new-site test.localhost \
+            --mariadb-root-password frappe \
+            --admin-password admin \
+            --no-mariadb-socket
+          bench --site test.localhost install-app erpnext
+          bench --site test.localhost install-app surge
+          bench --site test.localhost migrate
+        env:
+          CI: true
+
+      - name: Install pytest and dependencies in bench env
+        run: |
+          cd frappe-bench
+          ./env/bin/pip install pytest pytest-cov hypothesis msgspec
+
+      - name: "Run integration tests — Groups A, B, C, D, E, F, G"
+        run: |
+          cd frappe-bench
+          ./env/bin/pytest \
+            apps/surge/surge/tests/integration/ \
+            -v \
+            --tb=short \
+            -m integration \
+            --cov=apps/surge/surge/api \
+            --cov=apps/surge/surge/utils \
+            --cov-report=xml:coverage-integration.xml \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+        env:
+          FRAPPE_SITE: test.localhost
+          FRAPPE_BENCH: ${{ github.workspace }}/frappe-bench
+
+      - name: Upload integration coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-integration
+          path: frappe-bench/coverage-integration.xml
+
+# ── Job 4: E2E Tests (Playwright — Groups H1–H4) ─────────────────────────────
+  e2e:
+    name: "E2E Tests (Playwright — Groups H1–H4)"
+    runs-on: ubuntu-22.04
+    needs: fast-checks
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: apps/surge/web/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: apps/surge/web
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+        working-directory: apps/surge/web
+
+      - name: Start Vite dev server (with mocked API via route interception)
+        run: pnpm dev &
+        working-directory: apps/surge/web
+        env:
+          VITE_API_BASE: http://localhost:8000  # intercepted by Playwright anyway
+
+      - name: Wait for dev server to be ready
+        run: |
+          timeout 30 bash -c 'until curl -sf http://localhost:5173 > /dev/null; do sleep 1; done'
+
+      - name: "Run E2E tests — H1 stale session, H2 empty modes, H3 PaymentDialog race, H4 idle lock"
+        run: npx playwright test e2e/ --config=e2e/playwright.config.ts
+        working-directory: apps/surge/web
+        env:
+          E2E_BASE_URL: http://localhost:5173
+
+      - name: Upload Playwright failure screenshots and traces
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: apps/surge/web/e2e/test-results/
+          retention-days: 7
