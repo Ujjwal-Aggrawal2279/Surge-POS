@@ -23,7 +23,6 @@ pnpm-debug.log*
 
 # Build output
 web/dist/
-surge/public/dist/
 
 # Editor
 .DS_Store
