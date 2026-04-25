@@ -69,7 +69,7 @@ def _make_profile(name, users=None, warehouse=None):
 	p.warehouse = wh
 	p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
 	for m in frappe.get_all("Mode of Payment", limit=1, pluck="name"):
-		p.append("payments", {"mode_of_payment": m})
+		p.append("payments", {"mode_of_payment": m, "default": 1})
 	for u in users or []:
 		p.append(
 			"applicable_for_users",

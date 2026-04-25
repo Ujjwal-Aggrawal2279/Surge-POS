@@ -84,9 +84,9 @@ def _create_test_profile(modes=None):
 	p.company = company
 	p.warehouse = wh
 	p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
-	for m in modes:
+	for i, m in enumerate(modes):
 		if m in avail_modes:
-			p.append("payments", {"mode_of_payment": m})
+			p.append("payments", {"mode_of_payment": m, "default": 1 if i == 0 else 0})
 	p.append(
 		"applicable_for_users",
 		{"user": _MANAGER, "status": "Active", "access_level": "Manager"},

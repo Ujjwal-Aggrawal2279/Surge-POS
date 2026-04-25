@@ -43,7 +43,7 @@ from surge.api.invoices import (
 	_submit_invoice,
 )
 from surge.jobs.queue import enqueue_invoice
-from surge.tests.integration._base import ensure_master_data
+from surge.tests.integration._base import TEST_HSN, ensure_master_data
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -82,6 +82,7 @@ def _setup_fixtures():
 		item.item_name = "Surge Test Item"
 		item.item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name")
 		item.stock_uom = "Nos"
+		item.gst_hsn_code = TEST_HSN
 		item.is_stock_item = 1
 		item.insert(ignore_permissions=True)
 
@@ -104,8 +105,8 @@ def _setup_fixtures():
 		p.discount_limit_cashier = 5
 		p.discount_limit_supervisor = 15
 		p.discount_limit_manager = 100
-		for m in avail_modes[:2]:
-			p.append("payments", {"mode_of_payment": m})
+		for i, m in enumerate(avail_modes[:2]):
+			p.append("payments", {"mode_of_payment": m, "default": 1 if i == 0 else 0})
 		for u, lvl, pin in [
 			(_CASHIER, "Cashier", ""),
 			(_MANAGER, "Manager", _MANAGER_PIN_HASH),
@@ -127,7 +128,7 @@ def _setup_fixtures():
 
 
 def _make_req(items=None, payments=None, req_id=None, token=None):
-	profile_modes = frappe.get_all("POS Profile Payments", {"parent": _PROFILE}, pluck="mode_of_payment")
+	profile_modes = frappe.get_all("POS Payment Method", {"parent": _PROFILE}, pluck="mode_of_payment")
 	pay_mode = profile_modes[0] if profile_modes else "Cash"
 	return CreateInvoiceRequest(
 		client_request_id=req_id or str(uuid.uuid4()),
@@ -141,7 +142,7 @@ def _make_req(items=None, payments=None, req_id=None, token=None):
 
 
 def _get_pay_mode():
-	modes = frappe.get_all("POS Profile Payments", {"parent": _PROFILE}, pluck="mode_of_payment")
+	modes = frappe.get_all("POS Payment Method", {"parent": _PROFILE}, pluck="mode_of_payment")
 	return modes[0] if modes else "Cash"
 
 

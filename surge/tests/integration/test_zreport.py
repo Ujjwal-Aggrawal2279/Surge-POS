@@ -112,8 +112,8 @@ class ZReportBase(FrappeTestCase):
 			p.company = company
 			p.warehouse = wh
 			p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
-			for m in frappe.get_all("Mode of Payment", limit=2, pluck="name"):
-				p.append("payments", {"mode_of_payment": m})
+			for i, m in enumerate(frappe.get_all("Mode of Payment", limit=2, pluck="name")):
+				p.append("payments", {"mode_of_payment": m, "default": 1 if i == 0 else 0})
 			p.insert(ignore_permissions=True)
 			frappe.db.commit()
 

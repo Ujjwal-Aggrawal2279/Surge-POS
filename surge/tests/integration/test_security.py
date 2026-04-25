@@ -27,7 +27,7 @@ from surge.api.invoices import (
 	_submit_invoice,
 )
 from surge.overrides.sales_invoice import on_submit as inv_on_submit
-from surge.tests.integration._base import ensure_master_data
+from surge.tests.integration._base import TEST_HSN, ensure_master_data
 
 _PROFILE = "_HSecProfile"
 _CASHIER = "h_cashier@test.surge"
@@ -55,6 +55,7 @@ def _setup():
 		item.item_name = "Surge Security Test Item"
 		item.item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name")
 		item.stock_uom = "Nos"
+		item.gst_hsn_code = TEST_HSN
 		item.is_stock_item = 1
 		item.insert(ignore_permissions=True)
 
@@ -66,7 +67,7 @@ def _setup():
 		p.warehouse = wh
 		p.selling_price_list = frappe.db.get_value("Price List", {"buying": 0}, "name")
 		for m in modes:
-			p.append("payments", {"mode_of_payment": m})
+			p.append("payments", {"mode_of_payment": m, "default": 1})
 		p.append(
 			"applicable_for_users",
 			{
@@ -78,7 +79,7 @@ def _setup():
 		p.insert(ignore_permissions=True)
 
 	frappe.db.commit()
-	return frappe.get_all("POS Profile Payments", {"parent": _PROFILE}, pluck="mode_of_payment")[0]
+	return frappe.get_all("POS Payment Method", {"parent": _PROFILE}, pluck="mode_of_payment")[0]
 
 
 class TestSecurityEdgeCases(FrappeTestCase):
