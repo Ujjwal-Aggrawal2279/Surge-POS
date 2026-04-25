@@ -219,6 +219,11 @@ jobs:
         env:
           CI: true
 
+      - name: Create Frappe log directories
+        run: |
+          mkdir -p ${{ github.workspace }}/logs
+          mkdir -p ${{ github.workspace }}/frappe-bench/logs
+
       - name: Install pytest and dependencies in bench env
         run: |
           cd frappe-bench
