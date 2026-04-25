@@ -219,10 +219,12 @@ jobs:
         env:
           CI: true
 
-      - name: Create Frappe log directories
+      - name: Symlink site for Frappe v16 path resolution
         run: |
-          mkdir -p ${{ github.workspace }}/logs
-          mkdir -p ${{ github.workspace }}/frappe-bench/logs
+          # Frappe v16 resolves sites as {bench}/{site}/ (bench root = sites_path).
+          # Create a symlink so frappe-bench/test.localhost → frappe-bench/sites/test.localhost
+          ln -s ${{ github.workspace }}/frappe-bench/sites/test.localhost \
+                ${{ github.workspace }}/frappe-bench/test.localhost
 
       - name: Install pytest and dependencies in bench env
         run: |
