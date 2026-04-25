@@ -83,7 +83,7 @@ jobs:
           cache: pip
 
       - name: Install test dependencies
-        run: pip install pytest hypothesis pytest-cov msgspec
+        run: pip install pytest hypothesis pytest-cov msgspec cachetools orjson werkzeug
 
       - name: "Step 2a — AST scan: discover all @whitelist endpoints"
         run: |
