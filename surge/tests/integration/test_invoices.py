@@ -223,7 +223,6 @@ class InvoiceTestBase(FrappeTestCase):
 			frappe.db.commit()
 
 
-
 # ── C01-C05: Basic submission and idempotency ─────────────────────────────────
 
 

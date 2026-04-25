@@ -114,8 +114,8 @@ class ZReportBase(FrappeTestCase):
 			p.warehouse = TEST_WAREHOUSE
 			p.selling_price_list = TEST_PRICE_LIST
 			avail_modes = frappe.db.get_all(
-					"Mode of Payment Account", filters={"company": TEST_COMPANY}, pluck="parent", limit=2
-				) or ["Cash"]
+				"Mode of Payment Account", filters={"company": TEST_COMPANY}, pluck="parent", limit=2
+			) or ["Cash"]
 			for i, m in enumerate(avail_modes):
 				p.append("payments", {"mode_of_payment": m, "default": 1 if i == 0 else 0})
 			p.currency = "INR"
