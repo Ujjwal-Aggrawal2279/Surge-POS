@@ -43,7 +43,7 @@ async function interceptWithSession(page: import("@playwright/test").Page) {
 async function loginAndNavigateToSell(page: import("@playwright/test").Page) {
   await interceptWithSession(page);
   await page.clock.install();
-  await page.goto("/surge");
+  await page.goto("/");
   // Complete PIN entry to reach the sell screen
   const pinInput = page.locator("input[type='password'], input[data-testid='pin-input']").first();
   if (await pinInput.isVisible({ timeout: 5_000 }).catch(() => false)) {
@@ -183,7 +183,7 @@ test("D07: idle timer resets after shift close completes", async ({ page }) => {
   });
 
   await page.clock.install();
-  await page.goto("/surge");
+  await page.goto("/");
 
   // Simulate shift close happening early
   await page.clock.fastForward(1_000);

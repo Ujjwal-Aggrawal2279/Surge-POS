@@ -111,9 +111,14 @@ jobs:
 
 # ── Job 3: Integration Tests (Frappe + MariaDB + Redis) ──────────────────────
   integration:
-    name: "Integration Tests (Groups A–G)"
+    name: "Integration Tests (${{ matrix.frappe_branch }})"
     runs-on: ubuntu-22.04
     needs: fast-checks
+
+    strategy:
+      fail-fast: false
+      matrix:
+        frappe_branch: [version-15, version-16]
 
     services:
       mariadb:
@@ -168,7 +173,7 @@ jobs:
         run: |
           bench init \
             --skip-redis-config-generation \
-            --frappe-branch version-15 \
+            --frappe-branch ${{ matrix.frappe_branch }} \
             frappe-bench
         env:
           CI: true
@@ -176,8 +181,8 @@ jobs:
       - name: Get ERPNext and Surge
         run: |
           cd frappe-bench
-          bench get-app erpnext --branch version-15
-          bench get-app india_compliance --branch version-15
+          bench get-app erpnext --branch ${{ matrix.frappe_branch }}
+          bench get-app https://github.com/resilient-tech/india-compliance --branch ${{ matrix.frappe_branch }}
           bench get-app surge ${{ github.workspace }}
 
       - name: Configure Redis (TCP, no socket)
@@ -220,7 +225,6 @@ jobs:
             apps/surge/surge/tests/integration/ \
             -v \
             --tb=short \
-            -m integration \
             --cov=apps/surge/surge/api \
             --cov=apps/surge/surge/utils \
             --cov-report=xml:coverage-integration.xml \
@@ -234,7 +238,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-integration
+          name: coverage-integration-${{ matrix.frappe_branch }}
           path: frappe-bench/coverage-integration.xml
 
 # ── Job 4: E2E Tests (Playwright) ────────────────────────────────────────────
@@ -269,6 +273,7 @@ jobs:
         working-directory: web
         env:
           VITE_API_BASE: http://localhost:8000
+          VITE_BASE: /
 
       - name: Wait for dev server
         run: |

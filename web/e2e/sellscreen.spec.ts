@@ -88,7 +88,7 @@ async function interceptSellScreen(page: import("@playwright/test").Page) {
 
 test("H3: PaymentDialog is absent from DOM when ShiftClose overlay is open", async ({ page }) => {
   await interceptSellScreen(page);
-  await page.goto("/surge");
+  await page.goto("/");
 
   // Wait for the SellScreen to load (assumes session is active)
   await page.waitForSelector("text=Close Shift", { timeout: 15_000 });
@@ -117,7 +117,7 @@ test("H4: idle lock warning does not fire while logout modal is open", async ({ 
   // we verify the structural correctness: the dismissWarning button appears
   // when no modal is blocking it.
   await interceptSellScreen(page);
-  await page.goto("/surge");
+  await page.goto("/");
   await page.waitForSelector("button:has-text('Lock')", { timeout: 15_000 });
 
   // Open the logout confirmation modal
@@ -139,7 +139,7 @@ test("H4: idle lock warning does not fire while logout modal is open", async ({ 
 
 test("H3-sanity: PaymentDialog can be triggered when ShiftClose is not open", async ({ page }) => {
   await interceptSellScreen(page);
-  await page.goto("/surge");
+  await page.goto("/");
 
   // ShiftClose should NOT be open
   const shiftCloseOverlay = page.locator("text=Count your cash first");

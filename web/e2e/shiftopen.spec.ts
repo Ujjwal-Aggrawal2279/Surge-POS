@@ -82,7 +82,7 @@ test("H1: stale session shows amber warning banner", async ({ page }) => {
   });
 
   // Navigate to the POS app — replace with your actual route
-  await page.goto("/surge");
+  await page.goto("/");
 
   // Wait for ShiftOpen to render (after PIN screen)
   // The stale banner should appear within the shift open card
@@ -105,7 +105,7 @@ test("H2: empty payment_modes shows error message, not blank form", async ({ pag
     "surge.api.auth.get_cashiers": { cashiers: [mockCashier()] },
   });
 
-  await page.goto("/surge");
+  await page.goto("/");
 
   // Error message must be visible
   const errorMsg = page.locator("text=No payment modes configured").or(
@@ -127,7 +127,7 @@ test("H2-sanity: valid payment_modes renders input fields", async ({ page }) => 
     "surge.api.auth.get_cashiers": { cashiers: [mockCashier()] },
   });
 
-  await page.goto("/surge");
+  await page.goto("/");
 
   // Two numeric inputs should exist (one per payment mode)
   const inputs = page.locator("input[type='number']");
