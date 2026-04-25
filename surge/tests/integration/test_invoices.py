@@ -182,7 +182,9 @@ def _make_req(items=None, payments=None, req_id=None, token=None):
 		pos_profile=_PROFILE,
 		customer=_TEST_CUSTOMER,
 		items=items if items is not None else [InvoiceItem(item_code=_TEST_ITEM, qty=1.0, rate_paise=10000)],
-		payments=payments if payments is not None else [PaymentItem(mode_of_payment=pay_mode, amount_paise=10000)],
+		payments=payments
+		if payments is not None
+		else [PaymentItem(mode_of_payment=pay_mode, amount_paise=10000)],
 		offline=False,
 		approval_token=token,
 	)

@@ -383,7 +383,13 @@ def request_approval_remote(pos_profile: str, approver: str, action: str, meta: 
 
 	frappe.publish_realtime(
 		"surge:approval_request",
-		{"req_id": req_id, "cashier_name": cashier_name, "action": action, "pos_profile": pos_profile, "meta": meta},
+		{
+			"req_id": req_id,
+			"cashier_name": cashier_name,
+			"action": action,
+			"pos_profile": pos_profile,
+			"meta": meta,
+		},
 		user=approver,
 		after_commit=False,
 	)
