@@ -10,17 +10,18 @@ import os
 
 
 def pytest_configure(config):
-    import frappe
+	import frappe
 
-    bench = os.environ.get("FRAPPE_BENCH", os.getcwd())
-    site = os.environ.get("FRAPPE_SITE", "test.localhost")
-    frappe.init(site=site, sites_path=os.path.join(bench, "sites"))
-    frappe.connect()
+	bench = os.environ.get("FRAPPE_BENCH", os.getcwd())
+	site = os.environ.get("FRAPPE_SITE", "test.localhost")
+	frappe.init(site=site, sites_path=os.path.join(bench, "sites"))
+	frappe.connect()
 
 
 def pytest_sessionfinish(session, exitstatus):
-    try:
-        import frappe
-        frappe.destroy()
-    except Exception:
-        pass
+	try:
+		import frappe
+
+		frappe.destroy()
+	except Exception:
+		pass
