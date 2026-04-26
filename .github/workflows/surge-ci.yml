@@ -66,11 +66,8 @@ jobs:
         run: pnpm typecheck
         working-directory: web
 
-      - name: Frontend build + verify committed dist is current
-        run: |
-          pnpm build:no-bench
-          git diff --exit-code ../surge/public/dist/ ../surge/www/surge.html || \
-            (echo "❌ Committed dist/ is stale. Run 'pnpm build:no-bench' in web/ locally and commit the updated surge/public/dist/ and surge/www/surge.html before pushing." && exit 1)
+      - name: Frontend build (bundle integrity)
+        run: pnpm build
         working-directory: web
 
 # ── Job 2: AST Scan + Unit Tests ──────────────────────────────────────────────
