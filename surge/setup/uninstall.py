@@ -15,4 +15,4 @@ def before_uninstall():
 			if frappe.db.exists("Custom Field", name):
 				frappe.delete_doc("Custom Field", name, ignore_permissions=True)
 
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — custom field deletions must be committed during uninstall teardown

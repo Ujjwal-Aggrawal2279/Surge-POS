@@ -12,11 +12,11 @@ MANAGER_ROLES = {"System Manager", "Administrator"}
 def require_pos_role() -> None:
 	"""User must have at least one POS role."""
 	if frappe.session.user == "Guest":
-		frappe.throw("Not permitted", frappe.AuthenticationError)
+		frappe.throw(frappe._("Not permitted"), frappe.AuthenticationError)
 	user_roles = set(frappe.get_roles(frappe.session.user))
 	if not user_roles & POS_ROLES:
 		frappe.throw(
-			"You do not have permission to access Surge POS",
+			frappe._("You do not have permission to access Surge POS"),
 			frappe.PermissionError,
 		)
 
@@ -54,11 +54,11 @@ def require_pos_profile_access(profile: str) -> None:
 def require_manager_role() -> None:
 	"""User must be System Manager or Administrator to perform privileged operations."""
 	if frappe.session.user == "Guest":
-		frappe.throw("Not permitted", frappe.AuthenticationError)
+		frappe.throw(frappe._("Not permitted"), frappe.AuthenticationError)
 	user_roles = set(frappe.get_roles(frappe.session.user))
 	if not user_roles & MANAGER_ROLES:
 		frappe.throw(
-			"This action requires Manager access",
+			frappe._("This action requires Manager access"),
 			frappe.PermissionError,
 		)
 
@@ -79,7 +79,7 @@ def require_surge_manager_role() -> None:
 	)
 	if not is_manager:
 		frappe.throw(
-			"This action requires Surge Manager access",
+			frappe._("This action requires Surge Manager access"),
 			frappe.PermissionError,
 		)
 

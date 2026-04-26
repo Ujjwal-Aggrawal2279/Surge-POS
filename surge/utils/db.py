@@ -18,7 +18,7 @@ def items_query(since: str = "", limit: int = 500) -> list[dict]:
 		since_clause = "AND i.modified > %(since)s"
 		params["since"] = since
 
-	sql = f"""
+	sql = f"""  # nosemgrep: frappe-sql-format-injection — since_clause is a hardcoded literal, not user input; all values parameterised
         SELECT
             i.name          AS item_code,
             i.item_name,
@@ -78,7 +78,7 @@ def customers_query(since: str = "", limit: int = 1000) -> list[dict]:
 		since_clause = "AND modified > %(since)s"
 		params["since"] = since
 
-	sql = f"""
+	sql = f"""  # nosemgrep: frappe-sql-format-injection — since_clause is a hardcoded literal, not user input; all values parameterised
         SELECT
             name        AS customer_id,
             customer_name,

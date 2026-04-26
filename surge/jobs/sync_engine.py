@@ -40,7 +40,7 @@ def _trip_circuit_breaker() -> None:
 		expires_in_sec=CIRCUIT_BREAKER_COOLDOWN_MINUTES * 60,
 	)
 	try:
-		frappe.publish_realtime(
+		frappe.publish_realtime(  # nosemgrep: frappe-realtime-pick-room — intentional site-wide alert; no sensitive data
 			"surge:circuit_breaker_tripped",
 			{"cooldown_minutes": CIRCUIT_BREAKER_COOLDOWN_MINUTES},
 		)
@@ -186,7 +186,7 @@ def resolve_conflict(conflict_name: str, resolution: str) -> dict:
 			conflict.resulting_invoice = invoice_name
 			# ignore_permissions: internal doctype; manager access enforced above.
 			conflict.save(ignore_permissions=True)
-			frappe.db.commit()
+			frappe.db.commit()  # nosemgrep: frappe-manual-commit — conflict resolution must be visible to other workers immediately
 
 			return surge_response_dict({"status": "submitted", "invoice_name": invoice_name})
 
@@ -199,7 +199,7 @@ def resolve_conflict(conflict_name: str, resolution: str) -> dict:
 	conflict.resolved_at = now_datetime()
 	# ignore_permissions: internal doctype; manager access enforced above.
 	conflict.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — void resolution must be visible to other workers immediately
 
 	return surge_response_dict({"status": "voided"})
 
@@ -362,7 +362,7 @@ def _mark_conflict(name: str) -> None:
 
 def _safe_publish(event: str, data: dict) -> None:
 	try:
-		frappe.publish_realtime(event, data)
+		frappe.publish_realtime(event, data)  # nosemgrep: frappe-realtime-pick-room — caller controls event scope; used only for internal sync events
 	except Exception as e:
 		frappe.logger().warning(f"Surge: realtime publish failed for '{event}': {e}")
 

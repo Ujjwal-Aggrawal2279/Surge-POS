@@ -102,11 +102,11 @@ def create_invoice():
 
 def _submit_invoice(req: CreateInvoiceRequest) -> str:
 	if not req.client_request_id:
-		frappe.throw("client_request_id is required.", frappe.ValidationError)
+		frappe.throw(frappe._("client_request_id is required."), frappe.ValidationError)
 	if not req.items:
-		frappe.throw("Invoice must have at least one item.", frappe.ValidationError)
+		frappe.throw(frappe._("Invoice must have at least one item."), frappe.ValidationError)
 	if not req.payments:
-		frappe.throw("Invoice must have at least one payment.", frappe.ValidationError)
+		frappe.throw(frappe._("Invoice must have at least one payment."), frappe.ValidationError)
 
 	# Idempotency: scoped to submitting user; docstatus=1 excludes cancelled invoices
 	# so a cancelled invoice with the same req_id correctly generates a fresh submission.
@@ -240,7 +240,7 @@ def _check_discount_limits(req: CreateInvoiceRequest) -> dict | None:
 	# Respect ERPNext's native master switch before applying Surge role-based limits
 	any_discount = any(i.discount_paise > 0 for i in req.items)
 	if any_discount and not profile_doc.allow_discount_change:
-		frappe.throw("Discounts are disabled on this POS Profile.", frappe.ValidationError)
+		frappe.throw(frappe._("Discounts are disabled on this POS Profile."), frappe.ValidationError)
 
 	cashier = frappe.session.user
 	access_level = (
@@ -275,10 +275,11 @@ def _check_discount_limits(req: CreateInvoiceRequest) -> dict | None:
 			return payload
 
 	frappe.throw(
-		f"Discount of {max_item_pct:.1f}% exceeds your {access_level} "
-		f"limit of {max_pct:.0f}%. A Supervisor or Manager must approve.",
+		frappe._(
+			"Discount of {0}% exceeds your {1} limit of {2}%. A Supervisor or Manager must approve."
+		).format(f"{max_item_pct:.1f}", access_level, f"{max_pct:.0f}"),
 		frappe.ValidationError,
-		title="Approval Required",
+		title=frappe._("Approval Required"),
 	)
 
 

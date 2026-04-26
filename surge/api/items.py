@@ -129,7 +129,7 @@ def _fetch_prices(price_list: str, since: str, limit: int) -> list[dict]:
 		since_clause = "AND modified > %(since)s"
 		params["since"] = since
 
-	sql = f"""
+	sql = f"""  # nosemgrep: frappe-sql-format-injection — since_clause is a hardcoded literal, not user input; all values parameterised
         SELECT item_code, price_list_rate, currency, price_list, modified
         FROM `tabItem Price`
         WHERE price_list = %(price_list)s

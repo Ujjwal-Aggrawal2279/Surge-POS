@@ -252,7 +252,7 @@ def get_chart_data(period: str = "1M") -> object:
 	}
 	fmt, interval = period_map.get(period, period_map["1M"])
 
-	sales_rows = frappe.db.sql(
+	sales_rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection — fmt/interval from trusted period_map, not user input
 		f"""
         SELECT {fmt} AS label, SUM(grand_total) AS amount
         FROM `tabSales Invoice`
@@ -267,7 +267,7 @@ def get_chart_data(period: str = "1M") -> object:
 		as_dict=True,
 	)
 
-	purchase_rows = frappe.db.sql(
+	purchase_rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection — fmt/interval from trusted period_map, not user input
 		f"""
         SELECT {fmt} AS label, SUM(grand_total) AS amount
         FROM `tabPurchase Receipt`
@@ -345,7 +345,7 @@ def manager_get_list(
 		parsed_fields = json.loads(fields) if fields else []
 		parsed_filters = json.loads(filters) if filters else []
 	except Exception:
-		frappe.throw("Invalid fields or filters JSON.", frappe.ValidationError)
+		frappe.throw(frappe._("Invalid fields or filters JSON."), frappe.ValidationError)
 
 	rows = frappe.get_list(
 		doctype,
@@ -368,7 +368,7 @@ def _require_manager() -> None:
 			"status": "Active",
 		},
 	):
-		frappe.throw("Not permitted.", frappe.PermissionError)
+		frappe.throw(frappe._("Not permitted."), frappe.PermissionError)
 
 
 @frappe.whitelist(allow_guest=False)

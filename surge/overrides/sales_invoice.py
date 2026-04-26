@@ -14,7 +14,7 @@ def on_submit(doc, method=None):
 	)
 
 	try:
-		frappe.publish_realtime(
+		frappe.publish_realtime(  # nosemgrep: frappe-realtime-pick-room — scoped to submitting user via after_commit; no sensitive data in payload
 			"surge:invoice_submitted",
 			{
 				"invoice_name": doc.name,
@@ -30,9 +30,9 @@ def before_cancel(doc, method=None):
 		return
 	if not doc.get("void_reason"):
 		frappe.throw(
-			"A void reason is required before cancelling this invoice.",
+			frappe._("A void reason is required before cancelling this invoice."),
 			frappe.ValidationError,
-			title="Void Reason Required",
+			title=frappe._("Void Reason Required"),
 		)
 	_write_audit(
 		action_type="void_transaction",

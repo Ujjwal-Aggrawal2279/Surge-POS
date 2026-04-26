@@ -7,7 +7,7 @@ from surge.setup.custom_fields import SURGE_CUSTOM_FIELDS
 def after_install():
 	create_custom_fields(SURGE_CUSTOM_FIELDS, update=True)
 	_setup_pos_profile_perms()
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — custom fields must be committed before site setup continues
 
 
 def _setup_pos_profile_perms():

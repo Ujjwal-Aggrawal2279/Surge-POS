@@ -44,7 +44,7 @@ def run():
 			errors.append(f"{row.get('Vendor Name', '?')}: {e}")
 			frappe.db.rollback()
 
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — batch migration commits required for memory management and rollback isolation
 
 	_log(f"\n{'=' * 50}")
 	_log(f"Suppliers imported : {imported}")
@@ -64,7 +64,7 @@ def run():
 def _setup_prerequisites():
 	_log("\n--- Setting up prerequisites ---")
 	_ensure_supplier_group(SUPPLIER_GROUP, "All Supplier Groups")
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — batch migration commits required for memory management and rollback isolation
 	_log("Prerequisites ready")
 
 
@@ -139,7 +139,7 @@ def _import_supplier_doc(name, industry, pan, gstin, comments):
 	doc.supplier_group = SUPPLIER_GROUP
 	doc.supplier_type = "Company"
 	doc.country = COUNTRY
-	doc.supplier_details = "\n".join(filter(None, [industry, comments]))
+	doc.supplier_details = "\n".join(filter(None, [industry, comments]))  # nosemgrep: frappe-no-functional-code — inside a function, not module-level
 
 	if pan:
 		doc.tax_id = pan

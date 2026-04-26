@@ -62,7 +62,7 @@ def open_session(pos_profile: str, opening_balances: list) -> dict:
 
 	doc.insert(ignore_permissions=True)
 	doc.submit()
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — shift open must be persisted before cashier enters sell screen
 
 	return surge_response(
 		{
@@ -94,7 +94,7 @@ def close_session(opening_entry: str, closing_balances: list, discrepancy_reason
 			f"Session '{opening_entry}' was just closed by another request.",
 			frappe.ValidationError,
 		)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — shift close must be persisted so Z-report is immediately visible
 
 	return surge_response({"z_report": z_report})
 

@@ -63,7 +63,7 @@ def run():
 			errors.append(f"Template '{tpl['template_name']}': {e}")
 			frappe.db.rollback()
 
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — batch migration commits required for memory management and rollback isolation
 
 	_log(f"\n{'=' * 50}")
 	_log(f"Templates imported : {imported_templates}")
@@ -91,7 +91,7 @@ def _setup_prerequisites():
 	_ensure_vat_account()
 	_ensure_item_tax_template()
 	_ensure_volume_attribute()
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — batch migration commits required for memory management and rollback isolation
 	_log("Prerequisites ready")
 
 
@@ -549,7 +549,7 @@ def patch_code128_barcodes():
 		_log(f"  ✓ {variant_code} ← {barcode_type} {barcode_val}")
 		patched += 1
 
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — batch migration commits required for memory management and rollback isolation
 	_log(f"Patched {patched} barcodes")
 
 

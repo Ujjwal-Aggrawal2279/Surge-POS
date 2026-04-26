@@ -133,7 +133,7 @@ def set_pin(user: str, pin: str, pos_profile: str) -> object:
 
 	pin = (pin or "").strip()
 	if not pin.isdigit() or not (4 <= len(pin) <= 8):
-		frappe.throw("PIN must be 4-8 numeric digits.", frappe.ValidationError)
+		frappe.throw(frappe._("PIN must be 4-8 numeric digits."), frappe.ValidationError)
 
 	row_name = frappe.db.get_value(
 		"POS Profile User",
@@ -147,7 +147,7 @@ def set_pin(user: str, pin: str, pos_profile: str) -> object:
 		)
 
 	frappe.db.set_value("POS Profile User", row_name, "surge_pos_pin", _hash_pin(pin))
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — PIN must be persisted before releasing the request lock
 
 	_log_action("pin_set", user=user, profile=pos_profile, by=frappe.session.user)
 	return surge_response({"status": "ok"})
@@ -266,7 +266,7 @@ def forgot_pin(user: str, pos_profile: str) -> object:
 		except Exception:
 			frappe.logger().warning(f"Surge: could not create notification for {notify_user}")
 
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — notification docs must be committed before manager sees them
 	_log_action("forgot_pin", user=user, profile=pos_profile)
 
 	return surge_response({"status": "ok", "message": "If found, managers have been notified."})
@@ -692,7 +692,7 @@ def _require_manager_on_profile(pos_profile: str) -> None:
 		"access_level",
 	)
 	if access not in ("Manager",):
-		frappe.throw("Only Managers can set cashier PINs.", frappe.PermissionError)
+		frappe.throw(frappe._("Only Managers can set cashier PINs."), frappe.PermissionError)
 
 
 def _sign_token(payload: dict) -> str:

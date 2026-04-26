@@ -104,6 +104,6 @@ def retry_failed(name: str):
 	doc.last_error = None
 	doc.next_retry_at = frappe.utils.now_datetime()
 	doc.save(ignore_permissions=True)
-	frappe.db.commit()
+	frappe.db.commit()  # nosemgrep: frappe-manual-commit — queue entry must be visible to background worker immediately
 
 	return surge_response({"status": "queued", "name": name})
