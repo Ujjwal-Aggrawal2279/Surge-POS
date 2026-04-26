@@ -155,6 +155,11 @@ jobs:
           node-version: "24"
           check-latest: true
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
       - name: Install system dependencies
         run: |
           sudo apt-get update -y
