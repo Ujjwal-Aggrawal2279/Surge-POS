@@ -1,0 +1,32 @@
+name: Semgrep
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+    paths-ignore:
+      - "**.md"
+      - "**.csv"
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download Semgrep rules
+        run: git clone --depth 1 https://github.com/frappe/semgrep-rules.git frappe-semgrep-rules
+
+      - name: Download semgrep
+        run: pip install semgrep
+
+      - name: Run Semgrep rules
+        run: semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness
