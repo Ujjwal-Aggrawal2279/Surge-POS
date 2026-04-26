@@ -437,5 +437,48 @@ class TestManagerGate(unittest.TestCase):
 		m.db.sql.assert_not_called()
 
 
+# ── G23: manager_get_list validation ─────────────────────────────────────────
+
+
+class TestManagerGetList(unittest.TestCase):
+	def _make_list_frappe(self, *, is_manager=True):
+		m = MagicMock()
+		m.db.exists.return_value = is_manager
+		m.PermissionError = _FrappePermissionError
+		m.ValidationError = type("ValidationError", (Exception,), {})
+		m.throw.side_effect = lambda msg, exc=Exception: (_ for _ in ()).throw(exc(msg))
+		m.get_list.return_value = []
+		return m
+
+	def test_G23a_invalid_fields_json_raises_validation_error(self):
+		"""G23a: 'Invalid fields or filters JSON.' - malformed JSON raises ValidationError."""
+		from surge.api.dashboard import manager_get_list
+
+		m = self._make_list_frappe()
+		with patch("surge.api.dashboard.frappe", m):
+			with self.assertRaises(m.ValidationError):
+				manager_get_list(doctype="Item", fields="{not-json}")
+
+	def test_G23b_disallowed_doctype_raises_permission_error(self):
+		"""G23b: DocType not in allowlist raises PermissionError."""
+		from surge.api.dashboard import manager_get_list
+
+		m = self._make_list_frappe()
+		with patch("surge.api.dashboard.frappe", m):
+			with self.assertRaises(_FrappePermissionError):
+				manager_get_list(doctype="User")
+
+	def test_G23c_non_manager_blocked_before_list(self):
+		"""G23c: Non-manager cannot call manager_get_list."""
+		from surge.api.dashboard import manager_get_list
+
+		m = self._make_list_frappe(is_manager=False)
+		with patch("surge.api.dashboard.frappe", m):
+			with self.assertRaises(_FrappePermissionError):
+				manager_get_list(doctype="Item")
+
+		m.get_list.assert_not_called()
+
+
 if __name__ == "__main__":
 	unittest.main()

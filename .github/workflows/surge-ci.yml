@@ -36,6 +36,7 @@ jobs:
             surge/api/stock.py \
             surge/api/customers.py \
             surge/api/sync.py \
+            surge/api/dashboard.py \
             surge/utils/permissions.py \
             surge/overrides/sales_invoice.py \
             surge/jobs/queue.py
@@ -68,7 +69,7 @@ jobs:
       - name: Frontend build + verify committed dist is current
         run: |
           pnpm build
-          git diff --exit-code surge/public/dist/ surge/www/surge.html || \
+          git diff --exit-code ../surge/public/dist/ ../surge/www/surge.html || \
             (echo "❌ Committed dist/ is stale. Run 'pnpm build' in web/ locally and commit the updated surge/public/dist/ and surge/www/surge.html before pushing." && exit 1)
         working-directory: web
 

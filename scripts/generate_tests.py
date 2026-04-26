@@ -78,7 +78,7 @@ def _extract_throw_messages(tree: ast.AST) -> list[dict]:
 
 
 def _extract_require_guards(tree: ast.AST) -> list[str]:
-	"""Find all require_*() guard calls (require_pos_profile_access, require_surge_manager_role, etc.)."""
+	"""Find all require_*() / _require_*() guard calls."""
 	guards = []
 	for node in ast.walk(tree):
 		if isinstance(node, ast.Call):
@@ -88,9 +88,22 @@ def _extract_require_guards(tree: ast.AST) -> list[str]:
 				name = func.id
 			elif isinstance(func, ast.Attribute):
 				name = func.attr
-			if name and name.startswith("require_"):
+			if name and (name.startswith("require_") or name.startswith("_require_")):
 				guards.append(name)
 	return list(set(guards))
+
+
+def _decorator_restricts_guests(decorators: list[ast.expr]) -> bool:
+	"""Return True if @frappe.whitelist(allow_guest=False) is present."""
+	for d in decorators:
+		if not isinstance(d, ast.Call):
+			continue
+		if not _is_whitelist_decorator(d.func):
+			continue
+		for kw in d.keywords:
+			if kw.arg == "allow_guest" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
+				return True
+	return False
 
 
 def _extract_structs(tree: ast.AST) -> dict[str, dict]:
@@ -146,6 +159,9 @@ def analyze_file(path: Path) -> dict:
 		fn_tree = ast.Module(body=node.body, type_ignores=[])
 		throws = _extract_throw_messages(fn_tree)
 		guards = _extract_require_guards(fn_tree)
+		# allow_guest=False counts as an auth boundary even with no explicit guard call
+		if _decorator_restricts_guests(node.decorator_list):
+			guards = list(set(guards) | {"authenticated_only"})
 
 		endpoints[fn_name] = {
 			"module": f"surge.api.{path.stem}",
@@ -163,14 +179,16 @@ def analyze_file(path: Path) -> dict:
 
 def check_coverage(manifest: dict) -> list[str]:
 	"""
-	For each frappe.throw message found, grep integration test files to verify
+	For each frappe.throw message found, grep integration + unit test files to verify
 	at least one test references that message string.
 	Returns list of uncovered message strings.
 	"""
-	integration_sources = ""
-	if INTEGRATION_DIR.exists():
-		for f in INTEGRATION_DIR.glob("*.py"):
-			integration_sources += f.read_text()
+	test_sources = ""
+	for test_dir in (INTEGRATION_DIR, TESTS_DIR / "unit"):
+		if test_dir.exists():
+			for f in test_dir.glob("*.py"):
+				test_sources += f.read_text()
+	integration_sources = test_sources  # keep local var name used below
 
 	uncovered = []
 	for file_data in manifest.values():

@@ -3,11 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "cd web && yarn install --frozen-lockfile && yarn build:no-bench",
-    "dev": "cd web && yarn dev"
+    "build": "cd web && pnpm install --frozen-lockfile && pnpm build:no-bench",
+    "dev": "cd web && pnpm dev"
   },
   "engines": {
     "node": ">=18",
-    "yarn": ">=1.22"
+    "pnpm": ">=9"
   }
 }

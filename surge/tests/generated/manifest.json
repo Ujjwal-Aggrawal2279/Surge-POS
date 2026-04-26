@@ -1,0 +1,473 @@
+{
+  "auth": {
+    "structs": {},
+    "endpoints": {
+      "get_cashiers": {
+        "module": "surge.api.auth",
+        "line": 29,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "verify_pin": {
+        "module": "surge.api.auth",
+        "line": 61,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "set_pin": {
+        "module": "surge.api.auth",
+        "line": 130,
+        "throws": [
+          {
+            "message": "PIN must be 4-8 numeric digits.",
+            "exc": "ValidationError",
+            "line": 136
+          },
+          {
+            "message": null,
+            "exc": "ValidationError",
+            "line": 144
+          }
+        ],
+        "guards": [
+          "authenticated_only",
+          "_require_manager_on_profile",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "override_lockout": {
+        "module": "surge.api.auth",
+        "line": 157,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "forgot_pin": {
+        "module": "surge.api.auth",
+        "line": 196,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "request_approval": {
+        "module": "surge.api.auth",
+        "line": 276,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "request_approval_remote": {
+        "module": "surge.api.auth",
+        "line": 340,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "cancel_approval_request": {
+        "module": "surge.api.auth",
+        "line": 423,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      },
+      "respond_to_approval": {
+        "module": "surge.api.auth",
+        "line": 464,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      },
+      "poll_approval": {
+        "module": "surge.api.auth",
+        "line": 563,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      },
+      "get_pending_approvals": {
+        "module": "surge.api.auth",
+        "line": 577,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      },
+      "logout_cashier": {
+        "module": "surge.api.auth",
+        "line": 604,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      }
+    }
+  },
+  "customers": {
+    "structs": {},
+    "endpoints": {
+      "get_customers": {
+        "module": "surge.api.customers",
+        "line": 10,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      }
+    }
+  },
+  "dashboard": {
+    "structs": {},
+    "endpoints": {
+      "is_manager": {
+        "module": "surge.api.dashboard",
+        "line": 14,
+        "throws": [],
+        "guards": [
+          "authenticated_only"
+        ],
+        "structs_used": []
+      },
+      "get_sidebar_permissions": {
+        "module": "surge.api.dashboard",
+        "line": 27,
+        "throws": [],
+        "guards": [
+          "authenticated_only"
+        ],
+        "structs_used": []
+      },
+      "get_dashboard_stats": {
+        "module": "surge.api.dashboard",
+        "line": 48,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "_require_manager"
+        ],
+        "structs_used": []
+      },
+      "get_chart_data": {
+        "module": "surge.api.dashboard",
+        "line": 238,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "_require_manager"
+        ],
+        "structs_used": []
+      },
+      "manager_get_list": {
+        "module": "surge.api.dashboard",
+        "line": 303,
+        "throws": [
+          {
+            "message": null,
+            "exc": "PermissionError",
+            "line": 342
+          },
+          {
+            "message": "Invalid fields or filters JSON.",
+            "exc": "ValidationError",
+            "line": 348
+          }
+        ],
+        "guards": [
+          "authenticated_only",
+          "_require_manager"
+        ],
+        "structs_used": []
+      },
+      "get_stock_inventory": {
+        "module": "surge.api.dashboard",
+        "line": 375,
+        "throws": [],
+        "guards": [
+          "authenticated_only"
+        ],
+        "structs_used": []
+      }
+    }
+  },
+  "invoices": {
+    "structs": {
+      "InvoiceItem": {
+        "item_code": {
+          "type": "str",
+          "default": null
+        },
+        "qty": {
+          "type": "float",
+          "default": null
+        },
+        "rate_paise": {
+          "type": "int",
+          "default": null
+        },
+        "discount_paise": {
+          "type": "int",
+          "default": "0"
+        },
+        "warehouse": {
+          "type": "str | None",
+          "default": "None"
+        }
+      },
+      "PaymentItem": {
+        "mode_of_payment": {
+          "type": "str",
+          "default": null
+        },
+        "amount_paise": {
+          "type": "int",
+          "default": null
+        }
+      },
+      "CreateInvoiceRequest": {
+        "client_request_id": {
+          "type": "str",
+          "default": null
+        },
+        "pos_profile": {
+          "type": "str",
+          "default": null
+        },
+        "customer": {
+          "type": "str",
+          "default": null
+        },
+        "items": {
+          "type": "list[InvoiceItem]",
+          "default": null
+        },
+        "payments": {
+          "type": "list[PaymentItem]",
+          "default": null
+        },
+        "offline": {
+          "type": "bool",
+          "default": "False"
+        },
+        "approval_token": {
+          "type": "str | None",
+          "default": "None"
+        }
+      }
+    },
+    "endpoints": {
+      "create_invoice": {
+        "module": "surge.api.invoices",
+        "line": 38,
+        "throws": [
+          {
+            "message": null,
+            "exc": "ValidationError",
+            "line": 54
+          },
+          {
+            "message": null,
+            "exc": "ValidationError",
+            "line": 43
+          }
+        ],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": [
+          "InvoiceItem",
+          "PaymentItem",
+          "CreateInvoiceRequest"
+        ]
+      }
+    }
+  },
+  "items": {
+    "structs": {},
+    "endpoints": {
+      "get_pos_profiles": {
+        "module": "surge.api.items",
+        "line": 13,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      },
+      "get_items": {
+        "module": "surge.api.items",
+        "line": 58,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "get_item_prices": {
+        "module": "surge.api.items",
+        "line": 87,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      }
+    }
+  },
+  "session": {
+    "structs": {},
+    "endpoints": {
+      "get_active_session": {
+        "module": "surge.api.session",
+        "line": 9,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "open_session": {
+        "module": "surge.api.session",
+        "line": 30,
+        "throws": [
+          {
+            "message": null,
+            "exc": "ValidationError",
+            "line": 39
+          }
+        ],
+        "guards": [
+          "authenticated_only",
+          "require_pos_profile_access"
+        ],
+        "structs_used": []
+      },
+      "close_session": {
+        "module": "surge.api.session",
+        "line": 76,
+        "throws": [
+          {
+            "message": null,
+            "exc": "ValidationError",
+            "line": 81
+          },
+          {
+            "message": null,
+            "exc": "ValidationError",
+            "line": 93
+          }
+        ],
+        "guards": [
+          "authenticated_only",
+          "require_surge_manager_role"
+        ],
+        "structs_used": []
+      }
+    }
+  },
+  "stock": {
+    "structs": {},
+    "endpoints": {
+      "get_stock": {
+        "module": "surge.api.stock",
+        "line": 10,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_warehouse_access"
+        ],
+        "structs_used": []
+      }
+    }
+  },
+  "sync": {
+    "structs": {},
+    "endpoints": {
+      "queue_status": {
+        "module": "surge.api.sync",
+        "line": 8,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      },
+      "get_failed_items": {
+        "module": "surge.api.sync",
+        "line": 30,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      },
+      "get_conflicts": {
+        "module": "surge.api.sync",
+        "line": 67,
+        "throws": [],
+        "guards": [
+          "authenticated_only",
+          "require_surge_manager_role"
+        ],
+        "structs_used": []
+      },
+      "retry_failed": {
+        "module": "surge.api.sync",
+        "line": 91,
+        "throws": [
+          {
+            "message": null,
+            "exc": "ValidationError",
+            "line": 97
+          }
+        ],
+        "guards": [
+          "authenticated_only",
+          "require_pos_role"
+        ],
+        "structs_used": []
+      }
+    }
+  }
+}
