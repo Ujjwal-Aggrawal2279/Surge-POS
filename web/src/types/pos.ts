@@ -108,6 +108,96 @@ export interface POSProfile {
   discount_limit_manager: number;
 }
 
+export interface SidebarPermissions {
+  item_read: 0 | 1;
+  item_create: 0 | 1;
+  item_group_create: 0 | 1;
+  brand_create: 0 | 1;
+  stock_ledger_read: 0 | 1;
+  bin_read: 0 | 1;
+  purchase_order_read: 0 | 1;
+  purchase_receipt_read: 0 | 1;
+  sales_invoice_read: 0 | 1;
+  warehouse_read: 0 | 1;
+  customer_read: 0 | 1;
+  supplier_read: 0 | 1;
+  pos_profile_read: 0 | 1;
+}
+
+export interface KPIData {
+  total_sales: number;
+  total_returns: number;
+  total_purchase: number;
+  purchase_returns: number;
+  profit: number;
+  outstanding: number;
+  expenses: number;
+  invoice_count: number;
+}
+
+export interface OverviewData {
+  customers: number;
+  suppliers: number;
+  pos_sessions: number;
+}
+
+export interface RecentTransaction {
+  name: string;
+  customer: string;
+  posting_date: string;
+  status: string;
+  grand_total: number;
+  is_return: boolean;
+}
+
+export interface TopProduct {
+  item_code: string;
+  item_name: string;
+  total_qty: number;
+  total_amount: number;
+}
+
+export interface LowStockItem {
+  item_code: string;
+  item_name: string;
+  warehouse: string;
+  actual_qty: number;
+  reorder_level: number;
+  reorder_qty: number;
+}
+
+export interface DashboardStats {
+  currency_symbol: string;
+  kpi: KPIData;
+  overview: OverviewData;
+  recent_transactions: RecentTransaction[];
+  top_products: TopProduct[];
+  low_stock: LowStockItem[];
+}
+
+export interface ChartData {
+  labels: string[];
+  sales: number[];
+  purchases: number[];
+}
+
+export type DashboardPage =
+  | "dashboard"
+  | "products"
+  | "create-product"
+  | "disabled-products"
+  | "reordered-products"
+  | "category"
+  | "brands"
+  | "stock"
+  | "purchase-orders"
+  | "purchase-receipts"
+  | "sales-invoices"
+  | "warehouses"
+  | "customers"
+  | "suppliers"
+  | "pos-profiles";
+
 export interface Session {
   name: string;
   period_start_date: string;

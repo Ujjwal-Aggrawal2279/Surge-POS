@@ -16,6 +16,20 @@ sidebar_position: 8
 4. Click **Charge** → invoice submitted to ERPNext → success screen shows invoice number.
 5. Click **New Sale** to clear the cart.
 
+## Payment validation
+
+The server enforces the following on every invoice:
+
+| Rule | Behaviour |
+|---|---|
+| At least one payment entry required | Zero-payment submissions are rejected |
+| `amount > 0` per payment entry | Zero or negative amounts are rejected |
+| Payment mode must be configured on POS Profile | Unrecognised modes are rejected |
+| `paid_amount ≤ grand_total` | Overpayment is rejected |
+| Shortfall ≤ `write_off_limit` (default ₹1) | Shortfalls beyond the tolerance are rejected — cashier must collect the full amount |
+
+The `write_off_limit` on the POS Profile absorbs sub-₹1 GST rounding differences between client-computed and server-computed totals. It is not a mechanism for partial payment.
+
 ## Offline payments
 
 If the server is unreachable when **Charge** is clicked:
@@ -24,6 +38,8 @@ If the server is unreachable when **Charge** is clicked:
 - Invoice is queued in IndexedDB with a unique request ID.
 - Cart clears normally — the cashier can continue selling.
 - When connectivity returns, the queue syncs automatically (within ~10 seconds).
+
+Offline-queued invoices are replayed by the server-side sync engine even if the shift has been closed by the time connectivity is restored.
 
 ## Success screen
 

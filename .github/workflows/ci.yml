@@ -33,6 +33,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Build and verify committed dist is current
+        run: |
+          pnpm build
+          git diff --exit-code ../surge/public/dist/ ../surge/www/surge.html || \
+            (echo "❌ Committed dist/ is stale. Run 'pnpm build' in web/ and commit the updated surge/public/dist/ + surge/www/surge.html." && exit 1)
+
   backend:
     name: Backend — ruff
     runs-on: ubuntu-latest

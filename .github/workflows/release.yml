@@ -28,11 +28,13 @@ jobs:
           cache: pnpm
           cache-dependency-path: web/pnpm-lock.yaml
 
-      - name: Build frontend
+      - name: Build frontend and verify committed dist is current
         working-directory: web
         run: |
           pnpm install --frozen-lockfile
           pnpm run build:no-bench
+          git diff --exit-code ../surge/public/dist/ ../surge/www/surge.html || \
+            (echo "❌ Tag was pushed with a stale dist/. Rebuild locally, commit the dist, then re-tag." && exit 1)
 
       - name: Create release
         uses: softprops/action-gh-release@v2

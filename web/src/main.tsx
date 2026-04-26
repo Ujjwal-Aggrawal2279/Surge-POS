@@ -4,18 +4,23 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppShell } from "@/components/AppShell";
 import { LoginScreen } from "@/pages/LoginScreen";
+import { HomeSelector } from "@/pages/HomeSelector";
 import { Loader2 } from "lucide-react";
 import { saveSession, loadSession, clearSession } from "@/lib/session";
 import { initRealtime, subscribeToSurgeEvents } from "@/lib/realtime";
+import { get } from "@/lib/api";
 import type { Cashier, POSProfile, Session } from "@/types/pos";
 import "./index.css";
 
 // Eagerly loaded above — shown immediately for guests, no Suspense flash.
 // Authenticated pages lazy-load only when the user reaches them.
-const ProfileSelector = lazy(() => import("@/pages/ProfileSelector").then(m => ({ default: m.ProfileSelector })));
-const CashierScreen   = lazy(() => import("@/pages/CashierScreen").then(m => ({ default: m.CashierScreen })));
-const SellScreen      = lazy(() => import("@/pages/SellScreen").then(m => ({ default: m.SellScreen })));
-const ShiftOpen       = lazy(() => import("@/pages/ShiftOpen").then(m => ({ default: m.ShiftOpen })));
+const ProfileSelector  = lazy(() => import("@/pages/ProfileSelector").then(m => ({ default: m.ProfileSelector })));
+const CashierScreen    = lazy(() => import("@/pages/CashierScreen").then(m => ({ default: m.CashierScreen })));
+const SellScreen       = lazy(() => import("@/pages/SellScreen").then(m => ({ default: m.SellScreen })));
+const ShiftOpen        = lazy(() => import("@/pages/ShiftOpen").then(m => ({ default: m.ShiftOpen })));
+const DashboardScreen  = lazy(() => import("@/pages/DashboardScreen").then(m => ({ default: m.DashboardScreen })));
+
+type AppMode = "checking" | "home-selector" | "dashboard" | "pos";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -72,12 +77,26 @@ function App() {
   const [posSession, setPosSession] = useState<Session | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
 
+  // If the URL already points to a dashboard page (path or legacy hash), skip HomeSelector
+  const isDashboardUrl =
+    window.location.pathname.startsWith("/surge/dashboard") ||
+    window.location.hash.startsWith("#/dashboard");
+  const [appMode, setAppMode] = useState<AppMode>(isDashboardUrl ? "dashboard" : "checking");
+
   // Must be before any early return — rules of hooks
   useEffect(() => {
     const handle = () => setSessionExpired(true);
     window.addEventListener("surge:session-expired", handle);
     return () => window.removeEventListener("surge:session-expired", handle);
   }, []);
+
+  // Check manager access once on mount (skip if hash already determined mode)
+  useEffect(() => {
+    if (isGuest || isDashboardUrl) return;
+    get<{ is_manager: boolean }>("surge.api.dashboard.is_manager")
+      .then((res) => setAppMode(res.is_manager ? "home-selector" : "pos"))
+      .catch(() => setAppMode("pos")); // degraded: treat as cashier
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleLogin(p: POSProfile, c: Cashier) {
     saveSession(p, c);
@@ -101,6 +120,35 @@ function App() {
 
   if (isGuest) return <LoginScreen />;
 
+  if (appMode === "checking") {
+    return <div className="flex h-dvh items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#6938EF]" /></div>;
+  }
+
+  if (appMode === "dashboard") {
+    return (
+      <DashboardScreen
+        onGoToPOS={() => {
+          window.location.hash = "";
+          setAppMode("pos");
+        }}
+      />
+    );
+  }
+
+  if (appMode === "home-selector") {
+    return (
+      <HomeSelector
+        userFullName={window.SURGE_CONFIG?.user_fullname ?? ""}
+        onSelectDashboard={() => {
+          window.location.hash = "#/dashboard";
+          setAppMode("dashboard");
+        }}
+        onSelectPOS={() => setAppMode("pos")}
+      />
+    );
+  }
+
+  // appMode === "pos" — existing POS flow
   if (!profile) {
     return <ProfileSelector onSelect={setProfile} />;
   }

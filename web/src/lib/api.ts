@@ -75,7 +75,7 @@ export async function get<T>(
   const qs = new URLSearchParams(
     Object.entries(params)
       .filter(([, v]) => v !== undefined && v !== null && v !== "")
-      .map(([k, v]) => [k, String(v)]),
+      .map(([k, v]) => [k, typeof v === "object" ? JSON.stringify(v) : String(v)]),
   ).toString();
   const url = `/api/method/${method}${qs ? `?${qs}` : ""}`;
 

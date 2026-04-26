@@ -13,10 +13,13 @@ sidebar_position: 9
 3. Submit → Shift opens; you land on the Sell Screen.
 
 **Rules:**
-- Only one active session per profile at a time. A second attempt while a session is open is rejected.
-- Retrying `open_session` with the same request is idempotent — returns the existing session without creating a duplicate.
+- Only one active session per profile at a time. A second attempt while a session is open is rejected with an error — close the existing session first.
 - Only **Active** users on the POS Profile can open a shift (Inactive users are denied at the API level).
 - A profile with all users set to Inactive cannot be opened by anyone.
+
+:::info Shift required to sell
+Invoices cannot be submitted without an open shift. The API rejects real-time sales if no POS Opening Entry is active for the profile. Invoices that were recorded offline during a valid session and queued for later sync are replayed automatically when connectivity returns, even if the session has since closed.
+:::
 
 ## Stale sessions
 
