@@ -139,7 +139,9 @@ def _import_supplier_doc(name, industry, pan, gstin, comments):
 	doc.supplier_group = SUPPLIER_GROUP
 	doc.supplier_type = "Company"
 	doc.country = COUNTRY
-	doc.supplier_details = "\n".join(filter(None, [industry, comments]))  # nosemgrep: frappe-no-functional-code — inside a function, not module-level
+	doc.supplier_details = "\n".join(
+		filter(None, [industry, comments])
+	)  # nosemgrep: frappe-no-functional-code — inside a function, not module-level
 
 	if pan:
 		doc.tax_id = pan

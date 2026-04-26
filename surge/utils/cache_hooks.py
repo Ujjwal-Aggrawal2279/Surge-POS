@@ -21,7 +21,9 @@ def _coalesced_publish(event: str, message: dict, gate_key: str, window_sec: int
 	# frappe's cache().set_value doesn't expose NX — use execute_command directly
 	acquired = cache.execute_command("SET", cache.make_key(redis_key), 1, "EX", window_sec, "NX")
 	if acquired:
-		frappe.publish_realtime(event, message, after_commit=True)  # nosemgrep: frappe-realtime-pick-room — intentional site-wide cache-invalidation broadcast
+		frappe.publish_realtime(
+			event, message, after_commit=True
+		)  # nosemgrep: frappe-realtime-pick-room — intentional site-wide cache-invalidation broadcast
 
 
 def _invalidate_all_item_caches() -> None:

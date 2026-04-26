@@ -310,7 +310,9 @@ Open items — confirm with client before go-live:
      Treated as two separate templates due to inconsistent naming in xlsx.
      Confirm if same product — merge manually on prod if so.
 """
-	with open(os.path.join(OUT_DIR, "README.txt"), "w") as f:  # nosemgrep: frappe-security-file-traversal — OUT_DIR is a hardcoded constant, not user-controlled
+	with (
+		open(os.path.join(OUT_DIR, "README.txt"), "w") as f
+	):  # nosemgrep: frappe-security-file-traversal — OUT_DIR is a hardcoded constant, not user-controlled
 		f.write(content)
 	print("  README.txt")
 
@@ -325,7 +327,9 @@ def _write(filename: str, rows: list, fields: list | None = None):
 		return
 	if fields is None:
 		fields = list(rows[0].keys())
-	with open(path, "w", newline="", encoding="utf-8") as f:  # nosemgrep: frappe-security-file-traversal — path is an internal constant, not user-controlled
+	with open(
+		path, "w", newline="", encoding="utf-8"
+	) as f:  # nosemgrep: frappe-security-file-traversal — path is an internal constant, not user-controlled
 		w = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
 		w.writeheader()
 		w.writerows(rows)

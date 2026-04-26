@@ -362,7 +362,9 @@ def _mark_conflict(name: str) -> None:
 
 def _safe_publish(event: str, data: dict) -> None:
 	try:
-		frappe.publish_realtime(event, data)  # nosemgrep: frappe-realtime-pick-room — caller controls event scope; used only for internal sync events
+		frappe.publish_realtime(
+			event, data
+		)  # nosemgrep: frappe-realtime-pick-room — caller controls event scope; used only for internal sync events
 	except Exception as e:
 		frappe.logger().warning(f"Surge: realtime publish failed for '{event}': {e}")
 
