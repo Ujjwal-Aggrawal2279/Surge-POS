@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect } from "react";
+import React, { lazy, Suspense, useState, useEffect, useReducer } from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -19,8 +19,6 @@ const CashierScreen    = lazy(() => import("@/pages/CashierScreen").then(m => ({
 const SellScreen       = lazy(() => import("@/pages/SellScreen").then(m => ({ default: m.SellScreen })));
 const ShiftOpen        = lazy(() => import("@/pages/ShiftOpen").then(m => ({ default: m.ShiftOpen })));
 const DashboardScreen  = lazy(() => import("@/pages/DashboardScreen").then(m => ({ default: m.DashboardScreen })));
-
-type AppMode = "checking" | "home-selector" | "dashboard" | "pos";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,32 +75,38 @@ function App() {
   const [posSession, setPosSession] = useState<Session | null>(null);
   const [sessionExpired, setSessionExpired] = useState(false);
 
-  // If the URL already points to a dashboard page (path or legacy hash), skip HomeSelector
-  const isDashboardUrl =
-    window.location.pathname.startsWith("/surge/dashboard") ||
-    window.location.hash.startsWith("#/dashboard");
-  const [appMode, setAppMode] = useState<AppMode>(isDashboardUrl ? "dashboard" : "checking");
+  // null = API call in flight; true/false = resolved
+  const [isManager, setIsManager] = useState<boolean | null>(null);
 
-  // Must be before any early return — rules of hooks
+  // Trigger re-render when URL changes via browser back/forward
+  const [, rerender] = useReducer(x => x + 1, 0);
+
+  useEffect(() => {
+    const handle = () => rerender();
+    window.addEventListener("popstate", handle);
+    return () => window.removeEventListener("popstate", handle);
+  }, []);
+
   useEffect(() => {
     const handle = () => setSessionExpired(true);
     window.addEventListener("surge:session-expired", handle);
     return () => window.removeEventListener("surge:session-expired", handle);
   }, []);
 
-  // Check manager access once on mount (skip if hash already determined mode)
+  // Manager check runs on mount for all non-guest users.
+  // For /surge/dashboard* it resolves in the background (non-blocking).
   useEffect(() => {
-    if (isGuest || isDashboardUrl) return;
+    if (isGuest) return;
     get<{ is_manager: boolean }>("surge.api.dashboard.is_manager")
-      .then((res) => setAppMode(res.is_manager ? "home-selector" : "pos"))
-      .catch(() => setAppMode("pos")); // degraded: treat as cashier
+      .then((res) => setIsManager(res.is_manager))
+      .catch(() => setIsManager(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleLogin(p: POSProfile, c: Cashier) {
     saveSession(p, c);
     setProfile(p);
     setCashier(c);
-    setPosSession(null); // force ShiftOpen gate on new login
+    setPosSession(null);
   }
 
   function handleLock() {
@@ -120,35 +124,42 @@ function App() {
 
   if (isGuest) return <LoginScreen />;
 
-  if (appMode === "checking") {
-    return <div className="flex h-dvh items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#6938EF]" /></div>;
-  }
+  const pathname = window.location.pathname;
 
-  if (appMode === "dashboard") {
+  // ── Dashboard ──────────────────────────────────────────────────────────────
+  if (pathname.startsWith("/surge/dashboard")) {
     return (
       <DashboardScreen
         onGoToPOS={() => {
-          window.location.hash = "";
-          setAppMode("pos");
+          window.history.pushState({}, "", "/surge/pos");
+          rerender();
         }}
       />
     );
   }
 
-  if (appMode === "home-selector") {
+  // ── /surge — need manager status to decide what to show ───────────────────
+  if (!pathname.startsWith("/surge/pos") && isManager === null) {
+    return <div className="flex h-dvh items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-[#6938EF]" /></div>;
+  }
+
+  if (!pathname.startsWith("/surge/pos") && isManager) {
     return (
       <HomeSelector
         userFullName={window.SURGE_CONFIG?.user_fullname ?? ""}
         onSelectDashboard={() => {
-          window.location.hash = "#/dashboard";
-          setAppMode("dashboard");
+          window.history.pushState({}, "", "/surge/dashboard");
+          rerender();
         }}
-        onSelectPOS={() => setAppMode("pos")}
+        onSelectPOS={() => {
+          window.history.pushState({}, "", "/surge/pos");
+          rerender();
+        }}
       />
     );
   }
 
-  // appMode === "pos" — existing POS flow
+  // ── POS flow — /surge/pos or non-manager at /surge ────────────────────────
   if (!profile) {
     return <ProfileSelector onSelect={setProfile} />;
   }
@@ -163,14 +174,8 @@ function App() {
     );
   }
 
-  // ShiftOpen gate — check for active POS Opening Entry before selling
   if (!posSession) {
-    return (
-      <ShiftOpenGate
-        profile={profile}
-        onSessionReady={setPosSession}
-      />
-    );
+    return <ShiftOpenGate profile={profile} onSessionReady={setPosSession} />;
   }
 
   return (
@@ -191,12 +196,7 @@ function App() {
 // Separate component so ShiftOpen can call useSession internally without
 // violating hooks ordering in App (posSession may be null or truthy)
 function ShiftOpenGate({ profile, onSessionReady }: { profile: POSProfile; onSessionReady: (s: Session) => void }) {
-  return (
-    <ShiftOpen
-      profile={profile}
-      onSessionOpen={onSessionReady}
-    />
-  );
+  return <ShiftOpen profile={profile} onSessionOpen={onSessionReady} />;
 }
 
 // Initialize Socket.IO immediately — sets window.frappe.realtime synchronously
