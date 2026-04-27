@@ -1,37 +1,77 @@
-import { AlertTriangle } from "lucide-react";
-import type { LowStockItem } from "@/types/pos";
+import { AlertTriangle, Loader2 } from "lucide-react";
+import { useWidgetsData } from "@/hooks/useWidgetsData";
+import type { DashboardPage } from "@/types/pos";
 
-interface Props {
-  items: LowStockItem[];
+const AVATAR_BG = [
+  "bg-[#FE9F43]", "bg-[#0E9384]", "bg-[#6938EF]", "bg-[#155EEF]", "bg-[#EF4444]",
+] as const;
+
+function avatarBg(code: string): string {
+  let h = 0;
+  for (let i = 0; i < code.length; i++) h = (h * 31 + code.charCodeAt(i)) >>> 0;
+  return AVATAR_BG[h % AVATAR_BG.length] ?? "bg-[#FE9F43]";
 }
 
-export function LowStock({ items }: Props) {
+interface Props {
+  onNavigate: (page: DashboardPage) => void;
+}
+
+export function LowStock({ onNavigate }: Props) {
+  const { data, isLoading } = useWidgetsData();
+  const items = data?.low_stock ?? [];
+
   return (
-    <div className="flex w-72 shrink-0 flex-col rounded-2xl border border-[#E6EAED] bg-white shadow-sm">
-      <div className="flex items-center gap-2 border-b border-[#E6EAED] px-5 py-4">
-        <AlertTriangle className="h-4 w-4 text-amber-500" />
-        <p className="text-sm font-bold text-[#212B36]">Low Stock</p>
-        {items.length > 0 && (
-          <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-700">
-            {items.length}
-          </span>
-        )}
+    <div className="flex flex-col rounded-lg border border-[#E6EAED] bg-white">
+
+      {/* Header */}
+      <div className="flex items-center gap-2 rounded-t-lg border-b border-[#E6EAED] bg-white px-5 py-3.75">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#FFEDE9]">
+          <AlertTriangle className="h-4 w-4 text-[#FF0000]" />
+        </div>
+        <p className="flex-1 text-lg font-bold text-[#212B36]">Low Stock Products</p>
+        <button
+          type="button"
+          onClick={() => onNavigate("stock")}
+          className="shrink-0 text-[13px] font-medium text-[#212B36] underline"
+        >
+          View All
+        </button>
       </div>
-      {items.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-[#919EAB]">All stock levels OK</p>
+
+      {/* Content */}
+      {isLoading ? (
+        <div className="flex flex-1 items-center justify-center py-10">
+          <Loader2 className="h-5 w-5 animate-spin text-[#FF0000]" />
+        </div>
+      ) : items.length === 0 ? (
+        <p className="px-5 py-10 text-center text-sm text-[#919EAB]">All stock levels OK</p>
       ) : (
-        <ul className="max-h-64 divide-y divide-[#F4F6F8] overflow-y-auto">
+        <div className="flex flex-col gap-6 p-5">
           {items.map((item) => (
-            <li key={`${item.item_code}:${item.warehouse}`} className="px-5 py-3">
-              <p className="truncate text-xs font-semibold text-[#212B36]">{item.item_name}</p>
-              <p className="text-[11px] text-[#919EAB]">{item.warehouse}</p>
-              <div className="mt-1 flex items-center gap-2 text-[11px]">
-                <span className="font-bold text-red-500">{item.actual_qty} units</span>
-                <span className="text-[#919EAB]">/ reorder at {item.reorder_level}</span>
+            <div key={`${item.item_code}:${item.warehouse}`} className="flex items-center justify-between gap-4">
+
+              {/* Avatar + details */}
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] text-sm font-bold text-white ${avatarBg(item.item_code)}`}>
+                  {item.item_name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <p className="truncate text-sm font-bold text-[#212B36]">{item.item_name}</p>
+                  <p className="text-[13px] text-[#646B72]">ID : #{item.item_code}</p>
+                </div>
               </div>
-            </li>
+
+              {/* Stock info — right aligned */}
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <span className="text-[13px] text-[#646B72]">Instock</span>
+                <span className="text-sm font-medium text-[#E04F16]">
+                  {String(item.actual_qty.toFixed(0)).padStart(2, "0")}
+                </span>
+              </div>
+
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
