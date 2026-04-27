@@ -10,6 +10,39 @@ def _can(doctype: str, ptype: str = "read") -> int:
 		return 0
 
 
+def _get_company() -> str:
+	company = frappe.defaults.get_user_default("company") or frappe.db.get_single_value(
+		"Global Defaults", "default_company"
+	)
+	if not company:
+		frappe.throw(frappe._("No default company configured."), frappe.ValidationError)
+	return company
+
+
+def _require_manager() -> None:
+	if not frappe.db.exists(
+		"POS Profile User",
+		{
+			"user": frappe.session.user,
+			"access_level": ["in", ["Manager", "Supervisor"]],
+			"status": "Active",
+		},
+	):
+		frappe.throw(frappe._("Not permitted."), frappe.PermissionError)
+
+
+_VALID_PERIODS = frozenset({"today", "this_week", "last_week", "this_month", "last_month"})
+
+# (start_sql, end_sql) — trusted expressions, never interpolated from user input
+_PERIOD_SQL: dict[str, tuple[str, str]] = {
+	"today":      ("CURDATE()",                                                              "CURDATE()"),
+	"this_week":  ("DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)",                  "CURDATE()"),
+	"last_week":  ("DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) + 7 DAY)",              "DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) + 1 DAY)"),
+	"this_month": ("DATE_FORMAT(CURDATE(), '%Y-%m-01')",                                    "CURDATE()"),
+	"last_month": ("DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m-01')",        "LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))"),
+}
+
+
 @frappe.whitelist(allow_guest=False)
 def is_manager() -> object:
 	exists = frappe.db.exists(
@@ -27,19 +60,19 @@ def is_manager() -> object:
 def get_sidebar_permissions() -> object:
 	return surge_response(
 		{
-			"item_read": _can("Item"),
-			"item_create": _can("Item", "create"),
-			"item_group_create": _can("Item Group", "create"),
-			"brand_create": _can("Brand", "create"),
-			"stock_ledger_read": _can("Stock Ledger Entry"),
-			"bin_read": _can("Bin"),
+			"item_read":            _can("Item"),
+			"item_create":         _can("Item", "create"),
+			"item_group_create":   _can("Item Group", "create"),
+			"brand_create":        _can("Brand", "create"),
+			"stock_ledger_read":   _can("Stock Ledger Entry"),
+			"bin_read":            _can("Bin"),
 			"purchase_order_read": _can("Purchase Order"),
 			"purchase_receipt_read": _can("Purchase Receipt"),
-			"sales_invoice_read": _can("Sales Invoice"),
-			"warehouse_read": _can("Warehouse"),
-			"customer_read": _can("Customer"),
-			"supplier_read": _can("Supplier"),
-			"pos_profile_read": _can("POS Profile"),
+			"sales_invoice_read":  _can("Sales Invoice"),
+			"warehouse_read":      _can("Warehouse"),
+			"customer_read":       _can("Customer"),
+			"supplier_read":       _can("Supplier"),
+			"pos_profile_read":    _can("POS Profile"),
 		}
 	)
 
@@ -47,12 +80,9 @@ def get_sidebar_permissions() -> object:
 @frappe.whitelist(allow_guest=False)
 def get_dashboard_stats(from_date: str, to_date: str) -> object:
 	_require_manager()
+	company = _get_company()
 
-	company = frappe.defaults.get_user_default("company") or frappe.db.get_single_value(
-		"Global Defaults", "default_company"
-	)
-
-	cache_key = f"surge:dashboard:stats:v2:{company}:{from_date}:{to_date}"
+	cache_key = f"surge:dashboard:stats:v3:{company}:{from_date}:{to_date}"
 	cached = frappe.cache().get_value(cache_key)
 	if cached:
 		return surge_response(cached)
@@ -111,123 +141,25 @@ def get_dashboard_stats(from_date: str, to_date: str) -> object:
 		as_dict=True,
 	)[0]
 
-	# ── Overview counts ──────────────────────────────────────────────────────────
-	customer_count = frappe.db.count("Customer")
-	supplier_count = frappe.db.count("Supplier")
-	pos_open_count = frappe.db.count(
-		"POS Opening Entry",
-		{"company": company, "docstatus": 1, "period_start_date": ["between", [from_date, to_date]]},
-	)
-
-	# ── Recent transactions (POS-only) ──────────────────────────────────────────
-	recent = frappe.db.sql(
-		"""
-        SELECT name, customer, posting_date, status, grand_total, is_return
-        FROM `tabSales Invoice`
-        WHERE docstatus = 1
-          AND is_pos    = 1
-          AND company   = %(company)s
-          AND posting_date BETWEEN %(from_date)s AND %(to_date)s
-        ORDER BY creation DESC
-        LIMIT 10
-        """,
-		values,
-		as_dict=True,
-	)
-
-	# ── Top selling products (POS-only) ─────────────────────────────────────────
-	top_products = frappe.db.sql(
-		"""
-        SELECT sii.item_code, sii.item_name,
-               SUM(sii.qty)        AS total_qty,
-               SUM(sii.net_amount) AS total_amount
-        FROM `tabSales Invoice Item` sii
-        INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
-        WHERE si.docstatus = 1
-          AND si.is_pos     = 1
-          AND si.is_return  = 0
-          AND si.company    = %(company)s
-          AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
-        GROUP BY sii.item_code, sii.item_name
-        ORDER BY total_qty DESC
-        LIMIT 5
-        """,
-		values,
-		as_dict=True,
-	)
-
-	# ── Low-stock items ──────────────────────────────────────────────────────────
-	low_stock = frappe.db.sql(
-		"""
-        SELECT b.item_code, i.item_name, b.warehouse,
-               b.actual_qty, COALESCE(ir.warehouse_reorder_level, 0) AS reorder_level,
-               COALESCE(ir.warehouse_reorder_qty, 0)                 AS reorder_qty
-        FROM `tabBin` b
-        INNER JOIN `tabItem` i ON i.name = b.item_code AND i.disabled = 0
-        LEFT JOIN `tabItem Reorder` ir ON ir.parent = b.item_code AND ir.warehouse = b.warehouse
-        WHERE b.actual_qty <= COALESCE(ir.warehouse_reorder_level, 0)
-          AND b.actual_qty >= 0
-        ORDER BY (b.actual_qty - COALESCE(ir.warehouse_reorder_level, 0)) ASC
-        LIMIT 10
-        """,
-		as_dict=True,
-	)
-
-	total_sales = float(si_row.total_sales or 0)
+	total_sales    = float(si_row.total_sales    or 0)
 	total_purchase = float(pr_row.total_purchase or 0)
-	profit = total_sales - total_purchase
+	profit         = total_sales - total_purchase
 
 	company_currency = frappe.db.get_value("Company", company, "default_currency") or "INR"
-	currency_symbol = frappe.db.get_value("Currency", company_currency, "symbol") or "₹"
+	currency_symbol  = frappe.db.get_value("Currency", company_currency, "symbol") or "₹"
 
 	result = {
 		"currency_symbol": currency_symbol,
 		"kpi": {
-			"total_sales": total_sales,
-			"total_returns": float(si_row.total_returns or 0),
-			"total_purchase": total_purchase,
-			"purchase_returns": float(pr_row.purchase_returns or 0),
-			"profit": profit,
-			"outstanding": float(si_row.outstanding or 0),
-			"expenses": float(exp_row.expenses or 0),
-			"invoice_count": int(si_row.invoice_count or 0),
+			"total_sales":       total_sales,
+			"total_returns":     float(si_row.total_returns    or 0),
+			"total_purchase":    total_purchase,
+			"purchase_returns":  float(pr_row.purchase_returns or 0),
+			"profit":            profit,
+			"outstanding":       float(si_row.outstanding      or 0),
+			"expenses":          float(exp_row.expenses         or 0),
+			"invoice_count":     int(si_row.invoice_count       or 0),
 		},
-		"overview": {
-			"customers": customer_count,
-			"suppliers": supplier_count,
-			"pos_sessions": pos_open_count,
-		},
-		"recent_transactions": [
-			{
-				"name": r.name,
-				"customer": r.customer,
-				"posting_date": str(r.posting_date),
-				"status": r.status,
-				"grand_total": float(r.grand_total or 0),
-				"is_return": bool(r.is_return),
-			}
-			for r in recent
-		],
-		"top_products": [
-			{
-				"item_code": p.item_code,
-				"item_name": p.item_name,
-				"total_qty": float(p.total_qty or 0),
-				"total_amount": float(p.total_amount or 0),
-			}
-			for p in top_products
-		],
-		"low_stock": [
-			{
-				"item_code": s.item_code,
-				"item_name": s.item_name,
-				"warehouse": s.warehouse,
-				"actual_qty": float(s.actual_qty or 0),
-				"reorder_level": float(s.reorder_level or 0),
-				"reorder_qty": float(s.reorder_qty or 0),
-			}
-			for s in low_stock
-		],
 	}
 
 	frappe.cache().set_value(cache_key, result, expires_in_sec=300)
@@ -235,12 +167,283 @@ def get_dashboard_stats(from_date: str, to_date: str) -> object:
 
 
 @frappe.whitelist(allow_guest=False)
+def get_overall_info() -> object:
+	"""All-time counts — not affected by the header date filter."""
+	_require_manager()
+	company = _get_company()
+
+	customers = frappe.db.count("Customer", {"disabled": 0})
+	suppliers  = frappe.db.count("Supplier", {"disabled": 0})
+	orders     = frappe.db.count(
+		"Sales Invoice",
+		{"docstatus": 1, "is_pos": 1, "is_return": 0, "company": company},
+	)
+	return surge_response({"customers": customers, "suppliers": suppliers, "orders": orders})
+
+
+@frappe.whitelist(allow_guest=False)
+def get_customer_overview(period: str = "today") -> object:
+	"""First-time vs returning customers for the chosen period."""
+	_require_manager()
+	if period not in _VALID_PERIODS:
+		frappe.throw(frappe._("Invalid period."), frappe.ValidationError)
+
+	company              = _get_company()
+	start_sql, end_sql   = _PERIOD_SQL[period]  # trusted dict — no user input interpolated
+
+	rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection — start_sql/end_sql from trusted dict, not user input
+		f"""
+        SELECT
+            si.customer,
+            CASE
+                WHEN EXISTS (
+                    SELECT 1
+                    FROM `tabSales Invoice` prior
+                    WHERE prior.customer     = si.customer
+                      AND prior.docstatus    = 1
+                      AND prior.is_pos       = 1
+                      AND prior.is_return    = 0
+                      AND prior.posting_date < {start_sql}
+                ) THEN 'returning'
+                ELSE 'first_time'
+            END AS customer_type
+        FROM `tabSales Invoice` si
+        WHERE si.docstatus    = 1
+          AND si.is_pos       = 1
+          AND si.is_return    = 0
+          AND si.company      = %(company)s
+          AND si.posting_date BETWEEN {start_sql} AND {end_sql}
+        GROUP BY si.customer
+        """,
+		{"company": company},
+		as_dict=True,
+	)
+
+	first_time = sum(1 for r in rows if r.customer_type == "first_time")
+	returning  = sum(1 for r in rows if r.customer_type == "returning")
+	total      = first_time + returning
+
+	return surge_response({
+		"first_time":      first_time,
+		"returning":       returning,
+		"first_time_pct":  round(first_time / total * 100) if total else 0,
+		"returning_pct":   round(returning  / total * 100) if total else 0,
+		"total":           total,
+	})
+
+
+@frappe.whitelist(allow_guest=False)
+def get_widgets_data() -> object:
+	"""All-time top products, low stock (threshold 100 default), and last-5 sale line items.
+	Independent of the header date filter — cached for 2 minutes."""
+	_require_manager()
+	company = _get_company()
+
+	cache_key = f"surge:dashboard:widgets:v1:{company}"
+	cached = frappe.cache().get_value(cache_key)
+	if cached:
+		return surge_response(cached)
+
+	# ── Top-5 products all-time — deterministic ORDER BY on qty tie ─────────────
+	top_products_rows = frappe.db.sql(
+		"""
+        SELECT sii.item_code, sii.item_name,
+               SUM(sii.qty)        AS total_qty,
+               SUM(sii.net_amount) AS total_amount
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+        WHERE si.docstatus = 1
+          AND si.is_pos    = 1
+          AND si.is_return = 0
+          AND si.company   = %(company)s
+        GROUP BY sii.item_code, sii.item_name
+        ORDER BY total_qty DESC, sii.item_code ASC
+        LIMIT 5
+        """,
+		{"company": company},
+		as_dict=True,
+	)
+
+	# ── Low stock — threshold: item-reorder-level → bin-reorder-level → 100 ────
+	# Excludes disabled items. Ordered most critical (lowest qty) first.
+	low_stock_rows = frappe.db.sql(
+		"""
+        SELECT b.item_code, i.item_name, b.warehouse,
+               b.actual_qty,
+               COALESCE(ir.warehouse_reorder_level, 100) AS reorder_level,
+               COALESCE(ir.warehouse_reorder_qty,   0)   AS reorder_qty
+        FROM `tabBin` b
+        INNER JOIN `tabItem` i ON i.name = b.item_code AND i.disabled = 0
+        LEFT JOIN `tabItem Reorder` ir
+               ON ir.parent    = b.item_code
+              AND ir.warehouse = b.warehouse
+        WHERE b.actual_qty < COALESCE(ir.warehouse_reorder_level, 100)
+          AND b.actual_qty >= 0
+        ORDER BY b.actual_qty ASC
+        LIMIT 10
+        """,
+		as_dict=True,
+	)
+
+	# ── Last-5 sale line items (non-return invoices, most recent first) ─────────
+	recent_rows = frappe.db.sql(
+		"""
+        SELECT sii.item_code, sii.item_name, sii.item_group,
+               sii.rate, sii.qty,
+               si.name         AS invoice,
+               si.posting_date,
+               si.status
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+        WHERE si.docstatus = 1
+          AND si.is_pos    = 1
+          AND si.is_return = 0
+          AND si.company   = %(company)s
+        ORDER BY si.creation DESC, sii.idx ASC
+        LIMIT 5
+        """,
+		{"company": company},
+		as_dict=True,
+	)
+
+	result = {
+		"top_products": [
+			{
+				"item_code":    p.item_code,
+				"item_name":    p.item_name,
+				"total_qty":    float(p.total_qty    or 0),
+				"total_amount": float(p.total_amount or 0),
+			}
+			for p in top_products_rows
+		],
+		"low_stock": [
+			{
+				"item_code":     s.item_code,
+				"item_name":     s.item_name,
+				"warehouse":     s.warehouse,
+				"actual_qty":    float(s.actual_qty    or 0),
+				"reorder_level": float(s.reorder_level or 0),
+				"reorder_qty":   float(s.reorder_qty   or 0),
+			}
+			for s in low_stock_rows
+		],
+		"recent_items": [
+			{
+				"item_code":    r.item_code,
+				"item_name":    r.item_name,
+				"item_group":   r.item_group or "",
+				"rate":         float(r.rate or 0),
+				"qty":          float(r.qty  or 0),
+				"invoice":      r.invoice,
+				"posting_date": str(r.posting_date),
+				"status":       r.status or "",
+			}
+			for r in recent_rows
+		],
+	}
+
+	frappe.cache().set_value(cache_key, result, expires_in_sec=120)
+	return surge_response(result)
+
+
+_WIDGET_PERIODS = frozenset({"today", "week", "month", "all"})
+
+# Maps period → SQL WHERE fragment (server-side trusted dict, never interpolated from user input)
+_WIDGET_PERIOD_SQL: dict[str, str] = {
+	"today": "AND si.posting_date = CURDATE()",
+	"week":  "AND si.posting_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)",
+	"month": "AND si.posting_date >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)",
+	"all":   "",
+}
+
+
+@frappe.whitelist(allow_guest=False)
+def get_top_products(period: str = "today") -> object:
+	"""Top-5 products by quantity sold for the chosen period."""
+	_require_manager()
+	if period not in _WIDGET_PERIODS:
+		frappe.throw(frappe._("Invalid period."), frappe.ValidationError)
+	company      = _get_company()
+	period_filter = _WIDGET_PERIOD_SQL[period]  # trusted dict — no user input interpolated
+
+	rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection — period_filter from trusted dict, not user input
+		f"""
+        SELECT sii.item_code, sii.item_name,
+               SUM(sii.qty)        AS total_qty,
+               SUM(sii.net_amount) AS total_amount
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+        WHERE si.docstatus = 1
+          AND si.is_pos    = 1
+          AND si.is_return = 0
+          AND si.company   = %(company)s
+          {period_filter}
+        GROUP BY sii.item_code, sii.item_name
+        ORDER BY total_qty DESC, sii.item_code ASC
+        LIMIT 5
+        """,
+		{"company": company},
+		as_dict=True,
+	)
+	return surge_response([
+		{
+			"item_code":    p.item_code,
+			"item_name":    p.item_name,
+			"total_qty":    float(p.total_qty    or 0),
+			"total_amount": float(p.total_amount or 0),
+		}
+		for p in rows
+	])
+
+
+@frappe.whitelist(allow_guest=False)
+def get_recent_items(period: str = "today") -> object:
+	"""Last-5 sale line items for the chosen period."""
+	_require_manager()
+	if period not in _WIDGET_PERIODS:
+		frappe.throw(frappe._("Invalid period."), frappe.ValidationError)
+	company       = _get_company()
+	period_filter = _WIDGET_PERIOD_SQL[period]  # trusted dict — no user input interpolated
+
+	rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection — period_filter from trusted dict, not user input
+		f"""
+        SELECT sii.item_code, sii.item_name, sii.item_group,
+               sii.rate, sii.qty,
+               si.name         AS invoice,
+               si.posting_date,
+               si.status
+        FROM `tabSales Invoice Item` sii
+        INNER JOIN `tabSales Invoice` si ON si.name = sii.parent
+        WHERE si.docstatus = 1
+          AND si.is_pos    = 1
+          AND si.is_return = 0
+          AND si.company   = %(company)s
+          {period_filter}
+        ORDER BY si.creation DESC, sii.idx ASC
+        LIMIT 5
+        """,
+		{"company": company},
+		as_dict=True,
+	)
+	return surge_response([
+		{
+			"item_code":    r.item_code,
+			"item_name":    r.item_name,
+			"item_group":   r.item_group or "",
+			"rate":         float(r.rate or 0),
+			"qty":          float(r.qty  or 0),
+			"invoice":      r.invoice,
+			"posting_date": str(r.posting_date),
+			"status":       r.status or "",
+		}
+		for r in rows
+	])
+
+
+@frappe.whitelist(allow_guest=False)
 def get_chart_data(period: str = "1M") -> object:
 	_require_manager()
-
-	company = frappe.defaults.get_user_default("company") or frappe.db.get_single_value(
-		"Global Defaults", "default_company"
-	)
+	company = _get_company()
 
 	period_map = {
 		"1D": ("DATE_FORMAT(posting_date, '%%H:00')", "1 DAY"),
@@ -282,18 +485,17 @@ def get_chart_data(period: str = "1M") -> object:
 		as_dict=True,
 	)
 
-	# Build label-aligned arrays
 	all_labels = sorted(
 		{r.label for r in sales_rows} | {r.label for r in purchase_rows},
 		key=lambda lbl: lbl,
 	)
-	sales_map = {r.label: float(r.amount or 0) for r in sales_rows}
+	sales_map    = {r.label: float(r.amount or 0) for r in sales_rows}
 	purchase_map = {r.label: float(r.amount or 0) for r in purchase_rows}
 
 	return surge_response(
 		{
-			"labels": all_labels,
-			"sales": [sales_map.get(lbl, 0) for lbl in all_labels],
+			"labels":    all_labels,
+			"sales":     [sales_map.get(lbl, 0)    for lbl in all_labels],
 			"purchases": [purchase_map.get(lbl, 0) for lbl in all_labels],
 		}
 	)
@@ -342,8 +544,8 @@ def manager_get_list(
 		frappe.throw(f"DocType '{doctype}' is not accessible via this endpoint.", frappe.PermissionError)
 
 	try:
-		parsed_fields = json.loads(fields) if fields else []
-		parsed_filters = json.loads(filters) if filters else []
+		parsed_fields  = json.loads(fields)  if fields   else []
+		parsed_filters = json.loads(filters) if filters  else []
 	except Exception:
 		frappe.throw(frappe._("Invalid fields or filters JSON."), frappe.ValidationError)
 
@@ -359,23 +561,11 @@ def manager_get_list(
 	return surge_response({"data": rows})
 
 
-def _require_manager() -> None:
-	if not frappe.db.exists(
-		"POS Profile User",
-		{
-			"user": frappe.session.user,
-			"access_level": ["in", ["Manager", "Supervisor"]],
-			"status": "Active",
-		},
-	):
-		frappe.throw(frappe._("Not permitted."), frappe.PermissionError)
-
-
 @frappe.whitelist(allow_guest=False)
 def get_stock_inventory(search: str = "", page: int = 0, page_size: int = 25) -> object:
 	"""Stock Inventory with item_name via SQL JOIN — frappe.client.get_list cannot JOIN."""
 	offset = int(page) * int(page_size)
-	like = f"%{search}%" if search else "%"
+	like   = f"%{search}%" if search else "%"
 	rows = frappe.db.sql(
 		"""
         SELECT b.item_code, i.item_name, b.warehouse,
@@ -392,12 +582,12 @@ def get_stock_inventory(search: str = "", page: int = 0, page_size: int = 25) ->
 	return surge_response(
 		[
 			{
-				"item_code": r.item_code,
-				"item_name": r.item_name,
-				"warehouse": r.warehouse,
-				"actual_qty": float(r.actual_qty or 0),
-				"reserved_qty": float(r.reserved_qty or 0),
-				"ordered_qty": float(r.ordered_qty or 0),
+				"item_code":   r.item_code,
+				"item_name":   r.item_name,
+				"warehouse":   r.warehouse,
+				"actual_qty":  float(r.actual_qty  or 0),
+				"reserved_qty":float(r.reserved_qty or 0),
+				"ordered_qty": float(r.ordered_qty  or 0),
 			}
 			for r in rows
 		]

@@ -33,11 +33,20 @@ def open_session(pos_profile: str, opening_balances: list) -> dict:
 	existing = frappe.db.get_value(
 		"POS Opening Entry",
 		{"pos_profile": pos_profile, "status": "Open", "docstatus": 1},
-		"name",
+		["name", "posting_date"],
+		as_dict=True,
 	)
 	if existing:
+		if str(existing.posting_date) != nowdate():
+			frappe.throw(
+				frappe._(
+					"The previous day's shift ({0}) was not closed. A Manager must close it from the dashboard before a new session can be opened."
+				).format(str(existing.posting_date)),
+				frappe.ValidationError,
+				title=frappe._("Stale Shift — Manager Action Required"),
+			)
 		frappe.throw(
-			f"A shift is already open for POS Profile '{pos_profile}'. Close it first.",
+			frappe._("A shift is already open for POS Profile '{0}'. Close it first.").format(pos_profile),
 			frappe.ValidationError,
 		)
 

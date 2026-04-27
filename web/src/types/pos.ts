@@ -169,16 +169,43 @@ export interface LowStockItem {
 export interface DashboardStats {
   currency_symbol: string;
   kpi: KPIData;
-  overview: OverviewData;
-  recent_transactions: RecentTransaction[];
-  top_products: TopProduct[];
-  low_stock: LowStockItem[];
 }
 
 export interface ChartData {
   labels: string[];
   sales: number[];
   purchases: number[];
+}
+
+export interface OverallInfoData {
+  customers: number;
+  suppliers: number;
+  orders: number;
+}
+
+export interface CustomerOverviewData {
+  first_time: number;
+  returning: number;
+  first_time_pct: number;
+  returning_pct: number;
+  total: number;
+}
+
+export interface RecentSaleItem {
+  item_code: string;
+  item_name: string;
+  item_group: string;
+  rate: number;
+  qty: number;
+  invoice: string;
+  posting_date: string;
+  status: string;
+}
+
+export interface WidgetsData {
+  top_products: TopProduct[];
+  low_stock: LowStockItem[];
+  recent_items: RecentSaleItem[];
 }
 
 export type DashboardPage =

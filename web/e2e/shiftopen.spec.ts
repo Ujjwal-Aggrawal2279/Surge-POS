@@ -72,7 +72,7 @@ async function interceptAPI(
 
 // ── H1: Stale session amber banner ────────────────────────────────────────
 
-test("H1: stale session shows amber warning banner", async ({ page }) => {
+test("H1: stale session shows manager-action warning and disables button", async ({ page }) => {
   await interceptAPI(page, {
     "surge.api.session.get_active_session": { session: null, stale: true },
     "surge.api.session.get_pos_profile": mockPOSProfile(),
@@ -81,16 +81,12 @@ test("H1: stale session shows amber warning banner", async ({ page }) => {
   await injectCashierSession(page, { paymentModes: ["Cash", "UPI"] });
   await page.goto("/");
 
-  // Wait for ShiftOpen to render (after PIN screen)
-  // The stale banner should appear within the shift open card
-  const staleBanner = page.locator("text=shift from a previous day").or(
-    page.locator("[data-testid='stale-session-warning']"),
-  );
+  const staleBanner = page.locator(".bg-red-50, .border-red-200").first();
+  await expect(staleBanner).toBeVisible({ timeout: 10_000 });
 
-  // Use amber styling as a fallback selector (robust against text changes)
-  const amberBanner = page.locator(".bg-amber-50, .border-amber-200").first();
-
-  await expect(amberBanner).toBeVisible({ timeout: 10_000 });
+  // Button must be disabled — cashier cannot open shift without manager closing stale one
+  const openBtn = page.getByRole("button", { name: /open shift/i });
+  await expect(openBtn).toBeDisabled();
 });
 
 // ── H2: Empty payment_modes shows error guard ─────────────────────────────

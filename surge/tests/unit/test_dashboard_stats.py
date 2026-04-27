@@ -48,50 +48,6 @@ def _exp(expenses=0.0):
 	return SimpleNamespace(expenses=expenses)
 
 
-def _recent_row(
-	name="SINV-01",
-	customer="Walk-in",
-	posting_date="2026-01-15",
-	status="Paid",
-	grand_total=100.0,
-	is_return=0,
-):
-	return SimpleNamespace(
-		name=name,
-		customer=customer,
-		posting_date=posting_date,
-		status=status,
-		grand_total=grand_total,
-		is_return=is_return,
-	)
-
-
-def _top_row(item_code="BEER-001", item_name="Beer", total_qty=10.0, total_amount=1000.0):
-	return SimpleNamespace(
-		item_code=item_code,
-		item_name=item_name,
-		total_qty=total_qty,
-		total_amount=total_amount,
-	)
-
-
-def _low_row(
-	item_code="BEER-001",
-	item_name="Beer",
-	warehouse="Stores",
-	actual_qty=2.0,
-	reorder_level=5.0,
-	reorder_qty=20.0,
-):
-	return SimpleNamespace(
-		item_code=item_code,
-		item_name=item_name,
-		warehouse=warehouse,
-		actual_qty=actual_qty,
-		reorder_level=reorder_level,
-		reorder_qty=reorder_qty,
-	)
-
 
 # ── Mock factory ─────────────────────────────────────────────────────────────
 
@@ -106,25 +62,20 @@ def _make_frappe(
 	si_row=None,
 	pr_row=None,
 	exp_row=None,
-	recent: list | None = None,
-	top_products: list | None = None,
-	low_stock: list | None = None,
-	customers: int = 5,
-	suppliers: int = 3,
-	sessions: int = 2,
 	currency_code: str = "INR",
 	currency_symbol: str = "₹",
 ) -> MagicMock:
 	"""
 	Build a MagicMock for the `frappe` module used inside dashboard.py.
 
-	frappe.db.sql is called six times in this order:
+	get_dashboard_stats now makes exactly 3 SQL calls:
 	    1. Sales Invoice KPI  → [si_row]
 	    2. Purchase Receipt   → [pr_row]
 	    3. GL Entry expenses  → [exp_row]
-	    4. Recent transactions → recent
-	    5. Top products        → top_products
-	    6. Low stock           → low_stock
+
+	Overview counts, recent transactions, top products, and low stock are
+	served by dedicated endpoints (get_overall_info, get_widgets_data, etc.)
+	and are no longer part of get_dashboard_stats.
 	"""
 	m = MagicMock()
 
@@ -147,18 +98,12 @@ def _make_frappe(
 	_cache.get_value.return_value = None
 	m.cache.return_value = _cache
 
-	# ── SQL side-effects (ordered) ────────────────────────────────────────────
+	# ── SQL side-effects (3 calls: SI KPI, Purchase, GL expenses) ────────────
 	m.db.sql.side_effect = [
 		[si_row if si_row is not None else _si()],
 		[pr_row if pr_row is not None else _pr()],
 		[exp_row if exp_row is not None else _exp()],
-		recent if recent is not None else [],
-		top_products if top_products is not None else [],
-		low_stock if low_stock is not None else [],
 	]
-
-	# ── Count calls: customers, suppliers, POS sessions ──────────────────────
-	m.db.count.side_effect = [customers, suppliers, sessions]
 
 	# ── Currency (two get_value calls) ───────────────────────────────────────
 	m.db.get_value.side_effect = [currency_code, currency_symbol]
@@ -253,12 +198,10 @@ class TestKPIValues(unittest.TestCase):
 		data = _call(_make_frappe(currency_symbol="€"))
 		self.assertEqual(data["currency_symbol"], "€")
 
-	def test_G09_overview_counts_from_db_count(self):
-		"""G09: overview.customers/suppliers/pos_sessions come from frappe.db.count."""
-		data = _call(_make_frappe(customers=12, suppliers=7, sessions=3))
-		self.assertEqual(data["overview"]["customers"], 12)
-		self.assertEqual(data["overview"]["suppliers"], 7)
-		self.assertEqual(data["overview"]["pos_sessions"], 3)
+	def test_G09_kpi_has_invoice_count(self):
+		"""G09: invoice_count is returned inside the kpi dict (not a top-level overview)."""
+		data = _call(_make_frappe(si_row=_si(invoice_count=7)))
+		self.assertEqual(data["kpi"]["invoice_count"], 7)
 
 
 # ── G10-G14: SQL query content — verify is_pos=1 filter is present ───────────
@@ -272,11 +215,7 @@ class TestSQLFilters(unittest.TestCase):
 	"""
 
 	def setUp(self):
-		self.mock_frappe = _make_frappe(
-			si_row=_si(total_sales=100.0),
-			recent=[_recent_row()],
-			top_products=[_top_row()],
-		)
+		self.mock_frappe = _make_frappe(si_row=_si(total_sales=100.0))
 		self.data = _call(self.mock_frappe)
 		self.sql_calls = _sql_calls(self.mock_frappe)
 
@@ -293,23 +232,22 @@ class TestSQLFilters(unittest.TestCase):
 		self.assertIn("docstatus", si_sql)
 		self.assertIn("1", si_sql)
 
-	def test_G12_recent_query_has_is_pos_filter(self):
-		"""G12: Recent transactions query (call #4) includes is_pos = 1."""
-		recent_sql = self.sql_calls[3]
-		self.assertIn("is_pos", recent_sql)
-		self.assertRegex(recent_sql, r"is_pos\s*=\s*1")
+	def test_G12_purchase_kpi_query_filters_by_docstatus(self):
+		"""G12: Purchase Receipt KPI query (call #2) filters docstatus = 1."""
+		pr_sql = self.sql_calls[1]
+		self.assertIn("docstatus", pr_sql)
+		self.assertRegex(pr_sql, r"docstatus\s*=\s*1")
 
-	def test_G13_top_products_query_has_is_pos_filter(self):
-		"""G13: Top products query (call #5) includes si.is_pos = 1."""
-		top_sql = self.sql_calls[4]
-		self.assertIn("is_pos", top_sql)
-		self.assertRegex(top_sql, r"is_pos\s*=\s*1")
+	def test_G13_expense_query_scopes_to_expense_account_type(self):
+		"""G13: GL Entry expense query (call #3) filters by root_type = 'Expense'."""
+		exp_sql = self.sql_calls[2]
+		self.assertIn("Expense", exp_sql)
 
-	def test_G14_top_products_query_excludes_returns(self):
-		"""G14: Top products query also excludes return invoices (is_return = 0)."""
-		top_sql = self.sql_calls[4]
-		self.assertIn("is_return", top_sql)
-		self.assertRegex(top_sql, r"is_return\s*=\s*0")
+	def test_G14_expense_query_excludes_cancelled_entries(self):
+		"""G14: GL Entry expense query excludes cancelled entries (is_cancelled = 0)."""
+		exp_sql = self.sql_calls[2]
+		self.assertIn("is_cancelled", exp_sql)
+		self.assertRegex(exp_sql, r"is_cancelled\s*=\s*0")
 
 	def test_G15_sales_kpi_uses_date_range_params(self):
 		"""G15: All three money queries receive from_date and to_date via params."""
@@ -324,14 +262,15 @@ class TestSQLFilters(unittest.TestCase):
 
 class TestResponseShape(unittest.TestCase):
 	def setUp(self):
-		recent = [_recent_row(name=f"SINV-{i:02d}") for i in range(3)]
-		top = [_top_row(item_code=f"ITEM-{i}", total_qty=float(10 - i)) for i in range(3)]
-		low = [_low_row(item_code="LOW-001")]
-		self.data = _call(_make_frappe(recent=recent, top_products=top, low_stock=low))
+		self.data = _call(_make_frappe(
+			si_row=_si(total_sales=500.0, invoice_count=3),
+			pr_row=_pr(total_purchase=200.0),
+		))
 
 	def test_G16_response_has_required_top_level_keys(self):
-		"""G16: Response dict contains all required top-level keys."""
-		for key in ("currency_symbol", "kpi", "overview", "recent_transactions", "top_products", "low_stock"):
+		"""G16: Response dict contains currency_symbol and kpi.
+		(overview/recent/products/low_stock are served by dedicated endpoints.)"""
+		for key in ("currency_symbol", "kpi"):
 			self.assertIn(key, self.data, f"Missing key: {key}")
 
 	def test_G17_kpi_has_all_fields(self):
@@ -348,26 +287,18 @@ class TestResponseShape(unittest.TestCase):
 		):
 			self.assertIn(field, self.data["kpi"], f"Missing kpi field: {field}")
 
-	def test_G18_recent_transactions_shape(self):
-		"""G18: Each recent_transactions row has name, customer, posting_date, status,
-		grand_total, is_return."""
-		self.assertEqual(len(self.data["recent_transactions"]), 3)
-		row = self.data["recent_transactions"][0]
-		for field in ("name", "customer", "posting_date", "status", "grand_total", "is_return"):
-			self.assertIn(field, row, f"Missing recent_transactions field: {field}")
+	def test_G18_kpi_profit_computed_from_sales_and_purchase(self):
+		"""G18: profit in kpi equals total_sales minus total_purchase."""
+		self.assertAlmostEqual(self.data["kpi"]["profit"], 300.0, places=2)
 
-	def test_G19_top_products_shape(self):
-		"""G19: Each top_products row has item_code, item_name, total_qty, total_amount."""
-		row = self.data["top_products"][0]
-		for field in ("item_code", "item_name", "total_qty", "total_amount"):
-			self.assertIn(field, row, f"Missing top_products field: {field}")
+	def test_G19_kpi_values_match_mocked_rows(self):
+		"""G19: total_sales and invoice_count reflect the mocked SI row values."""
+		self.assertEqual(self.data["kpi"]["total_sales"], 500.0)
+		self.assertEqual(self.data["kpi"]["invoice_count"], 3)
 
-	def test_G20_low_stock_shape(self):
-		"""G20: Each low_stock row has item_code, item_name, warehouse, actual_qty,
-		reorder_level, reorder_qty."""
-		row = self.data["low_stock"][0]
-		for field in ("item_code", "item_name", "warehouse", "actual_qty", "reorder_level", "reorder_qty"):
-			self.assertIn(field, row, f"Missing low_stock field: {field}")
+	def test_G20_currency_symbol_present(self):
+		"""G20: currency_symbol is returned at the top level."""
+		self.assertEqual(self.data["currency_symbol"], "₹")
 
 
 # ── G21: Cache behaviour ─────────────────────────────────────────────────────
@@ -402,11 +333,11 @@ class TestCacheBehaviour(unittest.TestCase):
 		m.db.sql.assert_not_called()
 		self.assertEqual(data["kpi"]["total_sales"], 999.0)
 
-	def test_G21b_cache_miss_calls_all_six_sql_queries(self):
-		"""G21b: Cache miss → frappe.db.sql called exactly 6 times."""
+	def test_G21b_cache_miss_calls_exactly_three_sql_queries(self):
+		"""G21b: Cache miss → frappe.db.sql called exactly 3 times (SI, PR, GL)."""
 		m = _make_frappe()
 		_call(m)
-		self.assertEqual(m.db.sql.call_count, 6)
+		self.assertEqual(m.db.sql.call_count, 3)
 
 	def test_G21c_result_stored_in_cache_after_computation(self):
 		"""G21c: After a cache miss, the computed result is stored via cache.set_value."""

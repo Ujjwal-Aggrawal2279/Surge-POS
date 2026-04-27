@@ -62,8 +62,11 @@ web/test-results/
 web/e2e/.playwright-cache/
 playwright-report/
 
+# Client data import/utility scripts (local only — hardcoded paths/client data)
+surge/data_migration/
+surge/cleanup_invoice.py
+
 # Misc
 *.log
 *.tmp
-surge/public/node_modules
 surge/public/node_modules
