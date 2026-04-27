@@ -81,45 +81,54 @@ export function ShiftOpen({ profile, onSessionOpen }: Props) {
         </div>
 
         <div className="px-6 py-5 space-y-4">
-          {stale && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              A shift from a previous day was found and has been locked out. Open a new shift to continue.
-            </div>
-          )}
-          <p className="text-sm text-muted-foreground">
-            Enter the opening float for each payment mode.
-          </p>
-
-          {profile.payment_modes.map((mode) => (
-            <div key={mode} className="flex items-center gap-3">
-              <label className="w-32 shrink-0 text-sm font-medium text-foreground">{mode}</label>
-              <div className="relative flex-1">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={amounts[mode] ?? ""}
-                  onChange={(e) => setAmounts((prev) => ({ ...prev, [mode]: e.target.value }))}
-                  className="w-full rounded-lg border border-input bg-background pl-7 pr-3 py-2 text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
-                />
+          {stale ? (
+            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+              <div>
+                <p className="font-semibold text-red-800">Previous shift was not closed</p>
+                <p className="mt-1 text-red-700">
+                  Yesterday's shift is still open. A <strong>Manager</strong> must close it
+                  from the Manager Dashboard before you can start today's session.
+                </p>
               </div>
             </div>
-          ))}
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Enter the opening float for each payment mode.
+              </p>
 
-          {totalPaise > 0 && (
-            <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-2 text-sm">
-              <span className="text-muted-foreground">Total opening float</span>
-              <span className="font-semibold tabular-nums">{formatCurrency(totalPaise)}</span>
-            </div>
-          )}
+              {profile.payment_modes.map((mode) => (
+                <div key={mode} className="flex items-center gap-3">
+                  <label className="w-32 shrink-0 text-sm font-medium text-foreground">{mode}</label>
+                  <div className="relative flex-1">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={amounts[mode] ?? ""}
+                      onChange={(e) => setAmounts((prev) => ({ ...prev, [mode]: e.target.value }))}
+                      className="w-full rounded-lg border border-input bg-background pl-7 pr-3 py-2 text-sm text-right tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+              ))}
 
-          {(submitError ?? error) && (
-            <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-              {submitError ?? error}
-            </p>
+              {totalPaise > 0 && (
+                <div className="flex items-center justify-between rounded-lg bg-muted px-4 py-2 text-sm">
+                  <span className="text-muted-foreground">Total opening float</span>
+                  <span className="font-semibold tabular-nums">{formatCurrency(totalPaise)}</span>
+                </div>
+              )}
+
+              {(submitError ?? error) && (
+                <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+                  {submitError ?? error}
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -127,7 +136,7 @@ export function ShiftOpen({ profile, onSessionOpen }: Props) {
           <button
             type="button"
             onClick={handleOpen}
-            disabled={submitting}
+            disabled={stale || submitting}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60 active:scale-[0.99]"
           >
             {submitting ? (
