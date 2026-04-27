@@ -35,11 +35,17 @@ _VALID_PERIODS = frozenset({"today", "this_week", "last_week", "this_month", "la
 
 # (start_sql, end_sql) — trusted expressions, never interpolated from user input
 _PERIOD_SQL: dict[str, tuple[str, str]] = {
-	"today":      ("CURDATE()",                                                              "CURDATE()"),
-	"this_week":  ("DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)",                  "CURDATE()"),
-	"last_week":  ("DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) + 7 DAY)",              "DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) + 1 DAY)"),
-	"this_month": ("DATE_FORMAT(CURDATE(), '%Y-%m-01')",                                    "CURDATE()"),
-	"last_month": ("DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m-01')",        "LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))"),
+	"today": ("CURDATE()", "CURDATE()"),
+	"this_week": ("DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)", "CURDATE()"),
+	"last_week": (
+		"DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) + 7 DAY)",
+		"DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) + 1 DAY)",
+	),
+	"this_month": ("DATE_FORMAT(CURDATE(), '%Y-%m-01')", "CURDATE()"),
+	"last_month": (
+		"DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL 1 MONTH), '%Y-%m-01')",
+		"LAST_DAY(DATE_SUB(CURDATE(), INTERVAL 1 MONTH))",
+	),
 }
 
 
@@ -60,19 +66,19 @@ def is_manager() -> object:
 def get_sidebar_permissions() -> object:
 	return surge_response(
 		{
-			"item_read":            _can("Item"),
-			"item_create":         _can("Item", "create"),
-			"item_group_create":   _can("Item Group", "create"),
-			"brand_create":        _can("Brand", "create"),
-			"stock_ledger_read":   _can("Stock Ledger Entry"),
-			"bin_read":            _can("Bin"),
+			"item_read": _can("Item"),
+			"item_create": _can("Item", "create"),
+			"item_group_create": _can("Item Group", "create"),
+			"brand_create": _can("Brand", "create"),
+			"stock_ledger_read": _can("Stock Ledger Entry"),
+			"bin_read": _can("Bin"),
 			"purchase_order_read": _can("Purchase Order"),
 			"purchase_receipt_read": _can("Purchase Receipt"),
-			"sales_invoice_read":  _can("Sales Invoice"),
-			"warehouse_read":      _can("Warehouse"),
-			"customer_read":       _can("Customer"),
-			"supplier_read":       _can("Supplier"),
-			"pos_profile_read":    _can("POS Profile"),
+			"sales_invoice_read": _can("Sales Invoice"),
+			"warehouse_read": _can("Warehouse"),
+			"customer_read": _can("Customer"),
+			"supplier_read": _can("Supplier"),
+			"pos_profile_read": _can("POS Profile"),
 		}
 	)
 
@@ -141,24 +147,24 @@ def get_dashboard_stats(from_date: str, to_date: str) -> object:
 		as_dict=True,
 	)[0]
 
-	total_sales    = float(si_row.total_sales    or 0)
+	total_sales = float(si_row.total_sales or 0)
 	total_purchase = float(pr_row.total_purchase or 0)
-	profit         = total_sales - total_purchase
+	profit = total_sales - total_purchase
 
 	company_currency = frappe.db.get_value("Company", company, "default_currency") or "INR"
-	currency_symbol  = frappe.db.get_value("Currency", company_currency, "symbol") or "₹"
+	currency_symbol = frappe.db.get_value("Currency", company_currency, "symbol") or "₹"
 
 	result = {
 		"currency_symbol": currency_symbol,
 		"kpi": {
-			"total_sales":       total_sales,
-			"total_returns":     float(si_row.total_returns    or 0),
-			"total_purchase":    total_purchase,
-			"purchase_returns":  float(pr_row.purchase_returns or 0),
-			"profit":            profit,
-			"outstanding":       float(si_row.outstanding      or 0),
-			"expenses":          float(exp_row.expenses         or 0),
-			"invoice_count":     int(si_row.invoice_count       or 0),
+			"total_sales": total_sales,
+			"total_returns": float(si_row.total_returns or 0),
+			"total_purchase": total_purchase,
+			"purchase_returns": float(pr_row.purchase_returns or 0),
+			"profit": profit,
+			"outstanding": float(si_row.outstanding or 0),
+			"expenses": float(exp_row.expenses or 0),
+			"invoice_count": int(si_row.invoice_count or 0),
 		},
 	}
 
@@ -173,8 +179,8 @@ def get_overall_info() -> object:
 	company = _get_company()
 
 	customers = frappe.db.count("Customer", {"disabled": 0})
-	suppliers  = frappe.db.count("Supplier", {"disabled": 0})
-	orders     = frappe.db.count(
+	suppliers = frappe.db.count("Supplier", {"disabled": 0})
+	orders = frappe.db.count(
 		"Sales Invoice",
 		{"docstatus": 1, "is_pos": 1, "is_return": 0, "company": company},
 	)
@@ -188,8 +194,8 @@ def get_customer_overview(period: str = "today") -> object:
 	if period not in _VALID_PERIODS:
 		frappe.throw(frappe._("Invalid period."), frappe.ValidationError)
 
-	company              = _get_company()
-	start_sql, end_sql   = _PERIOD_SQL[period]  # trusted dict — no user input interpolated
+	company = _get_company()
+	start_sql, end_sql = _PERIOD_SQL[period]  # trusted dict — no user input interpolated
 
 	rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection — start_sql/end_sql from trusted dict, not user input
 		f"""
@@ -220,16 +226,18 @@ def get_customer_overview(period: str = "today") -> object:
 	)
 
 	first_time = sum(1 for r in rows if r.customer_type == "first_time")
-	returning  = sum(1 for r in rows if r.customer_type == "returning")
-	total      = first_time + returning
+	returning = sum(1 for r in rows if r.customer_type == "returning")
+	total = first_time + returning
 
-	return surge_response({
-		"first_time":      first_time,
-		"returning":       returning,
-		"first_time_pct":  round(first_time / total * 100) if total else 0,
-		"returning_pct":   round(returning  / total * 100) if total else 0,
-		"total":           total,
-	})
+	return surge_response(
+		{
+			"first_time": first_time,
+			"returning": returning,
+			"first_time_pct": round(first_time / total * 100) if total else 0,
+			"returning_pct": round(returning / total * 100) if total else 0,
+			"total": total,
+		}
+	)
 
 
 @frappe.whitelist(allow_guest=False)
@@ -309,34 +317,34 @@ def get_widgets_data() -> object:
 	result = {
 		"top_products": [
 			{
-				"item_code":    p.item_code,
-				"item_name":    p.item_name,
-				"total_qty":    float(p.total_qty    or 0),
+				"item_code": p.item_code,
+				"item_name": p.item_name,
+				"total_qty": float(p.total_qty or 0),
 				"total_amount": float(p.total_amount or 0),
 			}
 			for p in top_products_rows
 		],
 		"low_stock": [
 			{
-				"item_code":     s.item_code,
-				"item_name":     s.item_name,
-				"warehouse":     s.warehouse,
-				"actual_qty":    float(s.actual_qty    or 0),
+				"item_code": s.item_code,
+				"item_name": s.item_name,
+				"warehouse": s.warehouse,
+				"actual_qty": float(s.actual_qty or 0),
 				"reorder_level": float(s.reorder_level or 0),
-				"reorder_qty":   float(s.reorder_qty   or 0),
+				"reorder_qty": float(s.reorder_qty or 0),
 			}
 			for s in low_stock_rows
 		],
 		"recent_items": [
 			{
-				"item_code":    r.item_code,
-				"item_name":    r.item_name,
-				"item_group":   r.item_group or "",
-				"rate":         float(r.rate or 0),
-				"qty":          float(r.qty  or 0),
-				"invoice":      r.invoice,
+				"item_code": r.item_code,
+				"item_name": r.item_name,
+				"item_group": r.item_group or "",
+				"rate": float(r.rate or 0),
+				"qty": float(r.qty or 0),
+				"invoice": r.invoice,
 				"posting_date": str(r.posting_date),
-				"status":       r.status or "",
+				"status": r.status or "",
 			}
 			for r in recent_rows
 		],
@@ -351,9 +359,9 @@ _WIDGET_PERIODS = frozenset({"today", "week", "month", "all"})
 # Maps period → SQL WHERE fragment (server-side trusted dict, never interpolated from user input)
 _WIDGET_PERIOD_SQL: dict[str, str] = {
 	"today": "AND si.posting_date = CURDATE()",
-	"week":  "AND si.posting_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)",
+	"week": "AND si.posting_date >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)",
 	"month": "AND si.posting_date >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)",
-	"all":   "",
+	"all": "",
 }
 
 
@@ -363,7 +371,7 @@ def get_top_products(period: str = "today") -> object:
 	_require_manager()
 	if period not in _WIDGET_PERIODS:
 		frappe.throw(frappe._("Invalid period."), frappe.ValidationError)
-	company      = _get_company()
+	company = _get_company()
 	period_filter = _WIDGET_PERIOD_SQL[period]  # trusted dict — no user input interpolated
 
 	rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection — period_filter from trusted dict, not user input
@@ -385,15 +393,17 @@ def get_top_products(period: str = "today") -> object:
 		{"company": company},
 		as_dict=True,
 	)
-	return surge_response([
-		{
-			"item_code":    p.item_code,
-			"item_name":    p.item_name,
-			"total_qty":    float(p.total_qty    or 0),
-			"total_amount": float(p.total_amount or 0),
-		}
-		for p in rows
-	])
+	return surge_response(
+		[
+			{
+				"item_code": p.item_code,
+				"item_name": p.item_name,
+				"total_qty": float(p.total_qty or 0),
+				"total_amount": float(p.total_amount or 0),
+			}
+			for p in rows
+		]
+	)
 
 
 @frappe.whitelist(allow_guest=False)
@@ -402,7 +412,7 @@ def get_recent_items(period: str = "today") -> object:
 	_require_manager()
 	if period not in _WIDGET_PERIODS:
 		frappe.throw(frappe._("Invalid period."), frappe.ValidationError)
-	company       = _get_company()
+	company = _get_company()
 	period_filter = _WIDGET_PERIOD_SQL[period]  # trusted dict — no user input interpolated
 
 	rows = frappe.db.sql(  # nosemgrep: frappe-sql-format-injection — period_filter from trusted dict, not user input
@@ -425,19 +435,21 @@ def get_recent_items(period: str = "today") -> object:
 		{"company": company},
 		as_dict=True,
 	)
-	return surge_response([
-		{
-			"item_code":    r.item_code,
-			"item_name":    r.item_name,
-			"item_group":   r.item_group or "",
-			"rate":         float(r.rate or 0),
-			"qty":          float(r.qty  or 0),
-			"invoice":      r.invoice,
-			"posting_date": str(r.posting_date),
-			"status":       r.status or "",
-		}
-		for r in rows
-	])
+	return surge_response(
+		[
+			{
+				"item_code": r.item_code,
+				"item_name": r.item_name,
+				"item_group": r.item_group or "",
+				"rate": float(r.rate or 0),
+				"qty": float(r.qty or 0),
+				"invoice": r.invoice,
+				"posting_date": str(r.posting_date),
+				"status": r.status or "",
+			}
+			for r in rows
+		]
+	)
 
 
 @frappe.whitelist(allow_guest=False)
@@ -489,13 +501,13 @@ def get_chart_data(period: str = "1M") -> object:
 		{r.label for r in sales_rows} | {r.label for r in purchase_rows},
 		key=lambda lbl: lbl,
 	)
-	sales_map    = {r.label: float(r.amount or 0) for r in sales_rows}
+	sales_map = {r.label: float(r.amount or 0) for r in sales_rows}
 	purchase_map = {r.label: float(r.amount or 0) for r in purchase_rows}
 
 	return surge_response(
 		{
-			"labels":    all_labels,
-			"sales":     [sales_map.get(lbl, 0)    for lbl in all_labels],
+			"labels": all_labels,
+			"sales": [sales_map.get(lbl, 0) for lbl in all_labels],
 			"purchases": [purchase_map.get(lbl, 0) for lbl in all_labels],
 		}
 	)
@@ -544,8 +556,8 @@ def manager_get_list(
 		frappe.throw(f"DocType '{doctype}' is not accessible via this endpoint.", frappe.PermissionError)
 
 	try:
-		parsed_fields  = json.loads(fields)  if fields   else []
-		parsed_filters = json.loads(filters) if filters  else []
+		parsed_fields = json.loads(fields) if fields else []
+		parsed_filters = json.loads(filters) if filters else []
 	except Exception:
 		frappe.throw(frappe._("Invalid fields or filters JSON."), frappe.ValidationError)
 
@@ -565,7 +577,7 @@ def manager_get_list(
 def get_stock_inventory(search: str = "", page: int = 0, page_size: int = 25) -> object:
 	"""Stock Inventory with item_name via SQL JOIN — frappe.client.get_list cannot JOIN."""
 	offset = int(page) * int(page_size)
-	like   = f"%{search}%" if search else "%"
+	like = f"%{search}%" if search else "%"
 	rows = frappe.db.sql(
 		"""
         SELECT b.item_code, i.item_name, b.warehouse,
@@ -582,12 +594,12 @@ def get_stock_inventory(search: str = "", page: int = 0, page_size: int = 25) ->
 	return surge_response(
 		[
 			{
-				"item_code":   r.item_code,
-				"item_name":   r.item_name,
-				"warehouse":   r.warehouse,
-				"actual_qty":  float(r.actual_qty  or 0),
-				"reserved_qty":float(r.reserved_qty or 0),
-				"ordered_qty": float(r.ordered_qty  or 0),
+				"item_code": r.item_code,
+				"item_name": r.item_name,
+				"warehouse": r.warehouse,
+				"actual_qty": float(r.actual_qty or 0),
+				"reserved_qty": float(r.reserved_qty or 0),
+				"ordered_qty": float(r.ordered_qty or 0),
 			}
 			for r in rows
 		]

@@ -48,7 +48,6 @@ def _exp(expenses=0.0):
 	return SimpleNamespace(expenses=expenses)
 
 
-
 # ── Mock factory ─────────────────────────────────────────────────────────────
 
 
@@ -262,10 +261,12 @@ class TestSQLFilters(unittest.TestCase):
 
 class TestResponseShape(unittest.TestCase):
 	def setUp(self):
-		self.data = _call(_make_frappe(
-			si_row=_si(total_sales=500.0, invoice_count=3),
-			pr_row=_pr(total_purchase=200.0),
-		))
+		self.data = _call(
+			_make_frappe(
+				si_row=_si(total_sales=500.0, invoice_count=3),
+				pr_row=_pr(total_purchase=200.0),
+			)
+		)
 
 	def test_G16_response_has_required_top_level_keys(self):
 		"""G16: Response dict contains currency_symbol and kpi.
