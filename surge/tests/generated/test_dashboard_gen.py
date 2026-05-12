@@ -6,21 +6,28 @@ import pytest
 
 # ── Endpoint manifest ────────────────────────────────────────────
 ENDPOINTS = {
-    "is_manager": "surge.api.dashboard",
-    "get_sidebar_permissions": "surge.api.dashboard",
-    "get_dashboard_stats": "surge.api.dashboard",
-    "get_chart_data": "surge.api.dashboard",
-    "manager_get_list": "surge.api.dashboard",
-    "get_stock_inventory": "surge.api.dashboard"
+	"is_manager": "surge.api.dashboard",
+	"get_sidebar_permissions": "surge.api.dashboard",
+	"get_dashboard_stats": "surge.api.dashboard",
+	"get_chart_data": "surge.api.dashboard",
+	"manager_get_list": "surge.api.dashboard",
+	"get_stock_inventory": "surge.api.dashboard",
 }
+
 
 # ── Validation path stubs (implement in integration/) ────────────
 # Each stub will XFAIL until a real integration test covers it.
-@pytest.mark.parametrize('path_id,endpoint,error_fragment', [
-    ('manager_get_list::Invalid fields or filters JSON.', 'manager_get_list', 'Invalid fields or filters JSON.'),
-])
+@pytest.mark.parametrize(
+	"path_id,endpoint,error_fragment",
+	[
+		(
+			"manager_get_list::Invalid fields or filters JSON.",
+			"manager_get_list",
+			"Invalid fields or filters JSON.",
+		),
+	],
+)
 def test_validation_path_has_integration_coverage(path_id, endpoint, error_fragment, request):
-    '''Each frappe.throw() path must have an integration test that matches the message.'''
-    # This xfail is removed when integration/test_*.py covers the message.
-    pytest.xfail(f'Add integration test covering: {error_fragment!r} in {endpoint}')
-
+	"""Each frappe.throw() path must have an integration test that matches the message."""
+	# This xfail is removed when integration/test_*.py covers the message.
+	pytest.xfail(f"Add integration test covering: {error_fragment!r} in {endpoint}")

@@ -5,7 +5,4 @@
 import pytest
 
 # ── Endpoint manifest ────────────────────────────────────────────
-ENDPOINTS = {
-    "get_customers": "surge.api.customers"
-}
-
+ENDPOINTS = {"get_customers": "surge.api.customers"}
