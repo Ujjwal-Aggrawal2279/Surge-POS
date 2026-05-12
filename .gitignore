@@ -26,3 +26,4 @@ apps/surge/web/e2e/playwright-report/
 # Env / secrets
 .env
 .env.*
+*.fig
