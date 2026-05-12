@@ -1,72 +1,28 @@
-# Python
+# Frappe bench internals — never committed
+sites/
+logs/
+config/
+archived/
+env/
+patches.txt
+Procfile
+
+# Node / Python caches
+node_modules/
+__pycache__/
 *.pyc
 *.pyo
-*.pyd
-__pycache__/
-*.egg-info/
-*.egg
-dist/
-build/
-.eggs/
-*.so
-.venv/
-venv/
-env/
+.pytest_cache/
 
-# Node
-node_modules/
-web/node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
+# Build outputs
+apps/surge/web/dist/
+apps/surge/surge/public/surge/
+apps/surge/surge/tests/generated/
 
-# Build output
-web/dist/
-
-# Editor
-.DS_Store
-*.swp
-*.swo
-*~
-.idea/
-.vscode/
-*.sublime-project
-*.sublime-workspace
+# E2E artifacts
+apps/surge/web/e2e/test-results/
+apps/surge/web/e2e/playwright-report/
 
 # Env / secrets
 .env
-.env.local
-.env.*.local
-
-# Frappe
-tags
-*.pyc
-sites/
-logs/
-
-# Coverage
-coverage/
-.nyc_output/
-htmlcov/
-.coverage
-coverage-*.xml
-.pytest_cache/
-
-# Generated test files (rebuilt by CI on every run)
-surge/tests/generated/
-
-# Playwright
-web/e2e/test-results/
-web/test-results/
-web/e2e/.playwright-cache/
-playwright-report/
-
-# Client data import/utility scripts (local only — hardcoded paths/client data)
-surge/data_migration/
-surge/cleanup_invoice.py
-
-# Misc
-*.log
-*.tmp
-surge/public/node_modules
+.env.*
