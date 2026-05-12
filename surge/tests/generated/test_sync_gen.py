@@ -6,9 +6,8 @@ import pytest
 
 # ── Endpoint manifest ────────────────────────────────────────────
 ENDPOINTS = {
-    "queue_status": "surge.api.sync",
-    "get_failed_items": "surge.api.sync",
-    "get_conflicts": "surge.api.sync",
-    "retry_failed": "surge.api.sync"
+	"queue_status": "surge.api.sync",
+	"get_failed_items": "surge.api.sync",
+	"get_conflicts": "surge.api.sync",
+	"retry_failed": "surge.api.sync",
 }
-

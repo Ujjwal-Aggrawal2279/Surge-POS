@@ -6,27 +6,30 @@ import pytest
 
 # ── Endpoint manifest ────────────────────────────────────────────
 ENDPOINTS = {
-    "get_cashiers": "surge.api.auth",
-    "verify_pin": "surge.api.auth",
-    "set_pin": "surge.api.auth",
-    "override_lockout": "surge.api.auth",
-    "forgot_pin": "surge.api.auth",
-    "request_approval": "surge.api.auth",
-    "request_approval_remote": "surge.api.auth",
-    "cancel_approval_request": "surge.api.auth",
-    "respond_to_approval": "surge.api.auth",
-    "poll_approval": "surge.api.auth",
-    "get_pending_approvals": "surge.api.auth",
-    "logout_cashier": "surge.api.auth"
+	"get_cashiers": "surge.api.auth",
+	"verify_pin": "surge.api.auth",
+	"set_pin": "surge.api.auth",
+	"override_lockout": "surge.api.auth",
+	"forgot_pin": "surge.api.auth",
+	"request_approval": "surge.api.auth",
+	"request_approval_remote": "surge.api.auth",
+	"cancel_approval_request": "surge.api.auth",
+	"respond_to_approval": "surge.api.auth",
+	"poll_approval": "surge.api.auth",
+	"get_pending_approvals": "surge.api.auth",
+	"logout_cashier": "surge.api.auth",
 }
+
 
 # ── Validation path stubs (implement in integration/) ────────────
 # Each stub will XFAIL until a real integration test covers it.
-@pytest.mark.parametrize('path_id,endpoint,error_fragment', [
-    ('set_pin::PIN must be 4-8 numeric digits.', 'set_pin', 'PIN must be 4-8 numeric digits.'),
-])
+@pytest.mark.parametrize(
+	"path_id,endpoint,error_fragment",
+	[
+		("set_pin::PIN must be 4-8 numeric digits.", "set_pin", "PIN must be 4-8 numeric digits."),
+	],
+)
 def test_validation_path_has_integration_coverage(path_id, endpoint, error_fragment, request):
-    '''Each frappe.throw() path must have an integration test that matches the message.'''
-    # This xfail is removed when integration/test_*.py covers the message.
-    pytest.xfail(f'Add integration test covering: {error_fragment!r} in {endpoint}')
-
+	"""Each frappe.throw() path must have an integration test that matches the message."""
+	# This xfail is removed when integration/test_*.py covers the message.
+	pytest.xfail(f"Add integration test covering: {error_fragment!r} in {endpoint}")

@@ -6,8 +6,7 @@ import pytest
 
 # ── Endpoint manifest ────────────────────────────────────────────
 ENDPOINTS = {
-    "get_active_session": "surge.api.session",
-    "open_session": "surge.api.session",
-    "close_session": "surge.api.session"
+	"get_active_session": "surge.api.session",
+	"open_session": "surge.api.session",
+	"close_session": "surge.api.session",
 }
-

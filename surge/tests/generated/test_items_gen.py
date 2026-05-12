@@ -6,8 +6,7 @@ import pytest
 
 # ── Endpoint manifest ────────────────────────────────────────────
 ENDPOINTS = {
-    "get_pos_profiles": "surge.api.items",
-    "get_items": "surge.api.items",
-    "get_item_prices": "surge.api.items"
+	"get_pos_profiles": "surge.api.items",
+	"get_items": "surge.api.items",
+	"get_item_prices": "surge.api.items",
 }
-

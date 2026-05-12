@@ -1,0 +1,18 @@
+# Rust
+api/target/
+api/.env
+
+# Node
+web/node_modules/
+web/dist/
+web/.env
+web/.env.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
